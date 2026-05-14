@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+.env
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+.next/
+out/
+build/
+dist/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Secrets and local data
+.env.local
+.env.*.local
