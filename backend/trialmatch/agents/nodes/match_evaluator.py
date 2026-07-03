@@ -24,8 +24,10 @@ let the aggregate score treat every PASS/FAIL the same way.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +36,8 @@ from pydantic import BaseModel, Field
 from trialmatch.agents.state import AgentState
 from trialmatch.models import Criterion, PatientProfile, TrialVerdict
 from trialmatch.models.match import CriterionVerdict, Verdict
+
+logger = logging.getLogger(__name__)
 
 # (verdict, reasoning, confidence) returned by each per-category evaluator.
 EvalResult = tuple[Verdict, str, float]
@@ -405,6 +409,69 @@ def _aggregate(
 
 _PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "match_evaluation.txt"
 
+# Approximate list price in USD per 1M tokens, keyed by model-id prefix so a
+# dated/suffixed id ("claude-sonnet-4-6-...") still matches. Longest matching
+# prefix wins. Used only for a rough cost estimate in the call log; unknown
+# models fall back to Sonnet-tier rates with a warning.
+_PRICING_PER_MTOK: dict[str, tuple[float, float]] = {
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-sonnet-5": (3.0, 15.0),
+    "claude-opus-4-8": (5.0, 25.0),
+    "claude-opus-4-7": (5.0, 25.0),
+    "claude-haiku-4-5": (1.0, 5.0),
+}
+_FALLBACK_PRICING = (3.0, 15.0)  # Sonnet-tier
+
+
+def _estimate_cost_usd(model: str, input_tokens: int, output_tokens: int) -> float:
+    """Rough USD cost from token counts and the per-model price table."""
+    match = max(
+        (p for p in _PRICING_PER_MTOK if model.startswith(p)), key=len, default=""
+    )
+    if match:
+        in_rate, out_rate = _PRICING_PER_MTOK[match]
+    else:
+        in_rate, out_rate = _FALLBACK_PRICING
+        logger.warning(
+            "match_evaluator: no price table entry for model %r; using Sonnet-tier "
+            "rates ($%.2f/$%.2f per MTok) for the cost estimate.",
+            model, in_rate, out_rate,
+        )
+    return (input_tokens / 1_000_000) * in_rate + (output_tokens / 1_000_000) * out_rate
+
+
+def _log_llm_call(
+    llm: Any, raw_message: Any, n_criteria: int, latency_s: float
+) -> None:
+    """Emit an auditable per-trial record that Claude was actually called.
+
+    The evaluator sends all of a trial's criteria in one structured-output
+    request, so usage is reported per trial (one API call), not per criterion.
+    Token counts come from the model's ``usage_metadata``; cost is approximate.
+    Structured fields are attached via ``extra`` so callers/harnesses can read
+    them off the LogRecord without re-parsing the message.
+    """
+    usage = getattr(raw_message, "usage_metadata", None) or {}
+    input_tokens = int(usage.get("input_tokens", 0) or 0)
+    output_tokens = int(usage.get("output_tokens", 0) or 0)
+    response_meta = getattr(raw_message, "response_metadata", None) or {}
+    model = response_meta.get("model") or getattr(llm, "model", None) or "unknown"
+    cost_usd = _estimate_cost_usd(model, input_tokens, output_tokens)
+    logger.info(
+        "match_evaluator LLM call: model=%s criteria=%d (1 batched call) "
+        "input_tokens=%d output_tokens=%d cost_usd=$%.6f latency=%.2fs",
+        model, n_criteria, input_tokens, output_tokens, cost_usd, latency_s,
+        extra={
+            "llm_model": model,
+            "n_criteria": n_criteria,
+            "api_calls": 1,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cost_usd": cost_usd,
+            "latency_s": latency_s,
+        },
+    )
+
 
 class _LLMVerdict(BaseModel):
     index: int = Field(description="0-based index of the criterion being judged.")
@@ -444,13 +511,26 @@ async def _llm_evaluate(
 ) -> list[CriterionVerdict]:
     from langchain_core.messages import HumanMessage, SystemMessage
 
-    structured = llm.with_structured_output(_LLMTrialEvaluation)
-    result = await structured.ainvoke(
+    # include_raw=True returns {"raw": AIMessage, "parsed": model, "parsing_error": ...}
+    # so we can read usage_metadata / model name off the raw message for the
+    # call log, in addition to the validated structured output.
+    structured = llm.with_structured_output(_LLMTrialEvaluation, include_raw=True)
+    started = time.perf_counter()
+    raw_result = await structured.ainvoke(
         [
             SystemMessage(content=_PROMPT_PATH.read_text(encoding="utf-8")),
             HumanMessage(content=_llm_human_message(patient, criteria)),
         ]
     )
+    latency_s = time.perf_counter() - started
+
+    result = raw_result.get("parsed")
+    if result is None:
+        raise RuntimeError(
+            f"LLM structured output did not parse: {raw_result.get('parsing_error')!r}"
+        )
+    _log_llm_call(llm, raw_result.get("raw"), len(criteria), latency_s)
+
     by_index = {v.index: v for v in result.verdicts}
     verdicts: list[CriterionVerdict] = []
     for i, crit in enumerate(criteria):
@@ -476,8 +556,15 @@ async def _evaluate_criteria(
     if llm is not None and criteria:
         try:
             return await _llm_evaluate(llm, patient, criteria)
-        except Exception:
-            pass  # any LLM failure -> deterministic fallback keeps the run alive
+        except Exception as exc:
+            # Any LLM failure -> deterministic fallback keeps the run alive, but
+            # log it: a silent fallback is how a run can quietly evaluate on
+            # rules while the operator believes the LLM path is active.
+            logger.warning(
+                "match_evaluator: LLM evaluation failed (%s: %s); falling back to "
+                "the deterministic rule evaluator for %d criteria.",
+                type(exc).__name__, exc, len(criteria),
+            )
     return [_evaluate_criterion(patient, c) for c in criteria]
 
 

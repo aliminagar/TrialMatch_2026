@@ -8,6 +8,7 @@ and the score/aggregate logic — directly, without mocking a model.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import pytest
@@ -16,7 +17,13 @@ from trialmatch.agents.nodes.eligibility_parser import _categorize, eligibility_
 from trialmatch.agents.nodes.match_evaluator import (
     _aggregate,
     _build_llm,
+    _estimate_cost_usd,
+    _evaluate_criteria,
     _evaluate_criterion,
+    _llm_evaluate,
+    _LLMTrialEvaluation,
+    _LLMVerdict,
+    _log_llm_call,
     _parse_age_bounds,
     match_evaluator,
 )
@@ -255,6 +262,130 @@ def test_regression_pregnancy_criterion_is_reproductive_insufficient() -> None:
     )
     verdict = _evaluate_criterion(_patient(age=58), crit)
     assert verdict.verdict == "INSUFFICIENT_INFO"
+
+
+# ---- Claude-backed evaluator: logging, cost, and fallback (mocked, offline) --
+#
+# These never touch the network: a fake ChatAnthropic returns the same
+# include_raw={"raw", "parsed"} shape langchain's with_structured_output emits.
+
+
+class _FakeRaw:
+    """Stand-in for the langchain AIMessage carried under include_raw's "raw"."""
+
+    def __init__(self, input_tokens: int, output_tokens: int, model: str) -> None:
+        self.usage_metadata = {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+        }
+        self.response_metadata = {"model": model}
+
+
+class _FakeStructured:
+    def __init__(self, result: dict[str, Any], *, raises: Exception | None) -> None:
+        self._result = result
+        self._raises = raises
+
+    async def ainvoke(self, _messages: Any) -> dict[str, Any]:
+        if self._raises is not None:
+            raise self._raises
+        return self._result
+
+
+class _FakeLLM:
+    """Minimal ChatAnthropic double: records the include_raw flag it was given."""
+
+    def __init__(
+        self,
+        result: dict[str, Any] | None = None,
+        *,
+        raises: Exception | None = None,
+        model: str = "claude-sonnet-4-6",
+    ) -> None:
+        self._result = result or {}
+        self._raises = raises
+        self.model = model
+        self.include_raw_seen: bool | None = None
+
+    def with_structured_output(self, _schema: Any, *, include_raw: bool = False) -> Any:
+        self.include_raw_seen = include_raw
+        return _FakeStructured(self._result, raises=self._raises)
+
+
+def _fake_llm_result(model: str = "claude-sonnet-4-6") -> dict[str, Any]:
+    parsed = _LLMTrialEvaluation(
+        verdicts=[
+            _LLMVerdict(index=0, verdict="INSUFFICIENT_INFO", reasoning="dur", confidence=0.3),
+            _LLMVerdict(index=1, verdict="PASS", reasoning="ecog ok", confidence=0.9),
+        ]
+    )
+    return {"raw": _FakeRaw(1000, 500, model), "parsed": parsed, "parsing_error": None}
+
+
+def test_estimate_cost_sonnet_rates() -> None:
+    # 1000 in @ $3/MTok + 500 out @ $15/MTok = 0.003 + 0.0075 = 0.0105
+    assert _estimate_cost_usd("claude-sonnet-4-6", 1000, 500) == pytest.approx(0.0105)
+
+
+def test_estimate_cost_matches_dated_suffix_by_prefix() -> None:
+    # A dated/suffixed id still resolves to the same Sonnet rates via prefix.
+    assert _estimate_cost_usd("claude-sonnet-4-6-20990101", 1_000_000, 0) == pytest.approx(3.0)
+
+
+def test_estimate_cost_unknown_model_warns_and_uses_sonnet_fallback(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="trialmatch.agents.nodes.match_evaluator"):
+        cost = _estimate_cost_usd("some-unlisted-model", 1_000_000, 0)
+    assert cost == pytest.approx(3.0)  # Sonnet-tier fallback
+    assert any("no price table entry" in r.message for r in caplog.records)
+
+
+def test_log_llm_call_emits_structured_proof(caplog: pytest.LogCaptureFixture) -> None:
+    llm = _FakeLLM(model="claude-sonnet-4-6")
+    with caplog.at_level(logging.INFO, logger="trialmatch.agents.nodes.match_evaluator"):
+        _log_llm_call(llm, _FakeRaw(1000, 500, "claude-sonnet-4-6"), n_criteria=2, latency_s=1.5)
+    rec = next(r for r in caplog.records if getattr(r, "llm_model", None))
+    assert rec.levelno == logging.INFO
+    assert rec.llm_model == "claude-sonnet-4-6"
+    assert rec.api_calls == 1
+    assert rec.input_tokens == 1000
+    assert rec.output_tokens == 500
+    assert rec.n_criteria == 2
+    assert rec.cost_usd == pytest.approx(0.0105)
+    assert rec.latency_s == 1.5
+
+
+async def test_llm_evaluate_maps_verdicts_and_logs(caplog: pytest.LogCaptureFixture) -> None:
+    llm = _FakeLLM(_fake_llm_result())
+    criteria = [
+        _crit("relapsed within 12 months", category="prior_treatment"),
+        _crit("ECOG 0-1", category="performance"),
+    ]
+    with caplog.at_level(logging.INFO, logger="trialmatch.agents.nodes.match_evaluator"):
+        verdicts = await _llm_evaluate(llm, _patient(), criteria)
+
+    assert llm.include_raw_seen is True  # we asked for the raw message
+    assert [v.verdict for v in verdicts] == ["INSUFFICIENT_INFO", "PASS"]
+    # grounding is preserved: each verdict cites its own criterion text
+    assert [v.source_citation for v in verdicts] == [c.source_text for c in criteria]
+    assert any(getattr(r, "llm_model", None) == "claude-sonnet-4-6" for r in caplog.records)
+
+
+async def test_evaluate_criteria_falls_back_and_warns_on_llm_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    llm = _FakeLLM(raises=RuntimeError("boom"))
+    criteria = [_crit("ECOG 0-1", category="performance")]
+    with caplog.at_level(logging.WARNING, logger="trialmatch.agents.nodes.match_evaluator"):
+        verdicts = await _evaluate_criteria(_patient(), criteria, llm)
+
+    # Deterministic result still produced (ECOG 1 within 0-1 -> PASS)
+    assert [v.verdict for v in verdicts] == ["PASS"]
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert warnings, "expected a fallback WARNING"
+    assert "RuntimeError" in warnings[-1].message and "boom" in warnings[-1].message
 
 
 # ---- LLM path is opt-in and off by default (keeps tests offline) -----------
