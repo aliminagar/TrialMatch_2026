@@ -407,7 +407,8 @@ def test_aggregate_stats_sums_across_trials() -> None:
     assert agg.api_calls == 2
     assert agg.input_tokens == 1200 and agg.output_tokens == 600
     assert agg.cost_usd == pytest.approx(0.0126)
-    assert agg.latency_s == pytest.approx(3.5)
+    # latency is the max (concurrent eval), not the sum
+    assert agg.latency_s == pytest.approx(2.0)
 
 
 async def test_match_evaluator_surfaces_llm_stats_in_state(

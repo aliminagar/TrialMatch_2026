@@ -23,6 +23,7 @@ let the aggregate score treat every PASS/FAIL the same way.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -483,7 +484,13 @@ def _log_llm_call(
 
 
 def _aggregate_stats(stats: list[LlmStats]) -> LlmStats | None:
-    """Sum per-trial LLM stats into one run-level record (None if no LLM calls)."""
+    """Combine per-trial LLM stats into one run-level record (None if no calls).
+
+    Calls, tokens, and cost sum across trials. Latency takes the max, not the
+    sum: the trials are evaluated concurrently (see ``match_evaluator``), so the
+    slowest single call — not their total compute time — reflects the run's
+    wall-clock for the evaluation step.
+    """
     if not stats:
         return None
     return LlmStats(
@@ -492,7 +499,7 @@ def _aggregate_stats(stats: list[LlmStats]) -> LlmStats | None:
         input_tokens=sum(s.input_tokens for s in stats),
         output_tokens=sum(s.output_tokens for s in stats),
         cost_usd=sum(s.cost_usd for s in stats),
-        latency_s=sum(s.latency_s for s in stats),
+        latency_s=max(s.latency_s for s in stats),
     )
 
 
@@ -601,16 +608,30 @@ async def match_evaluator(state: AgentState) -> dict[str, Any]:
     parsed = state.get("parsed_criteria") or {}
     llm = _build_llm()  # None unless explicitly opted in; keeps tests offline
 
-    verdicts: dict[str, TrialVerdict] = {}
-    stats_by_trial: list[LlmStats] = []
-    for trial in trials:
+    async def _evaluate_trial(
+        trial: Any,
+    ) -> tuple[str, TrialVerdict, LlmStats | None]:
         criteria = parsed.get(trial.nct_id, [])
         criterion_verdicts, stats = await _evaluate_criteria(patient, criteria, llm)
+        return (
+            trial.nct_id,
+            _aggregate(trial.nct_id, trial.brief_title, criterion_verdicts),
+            stats,
+        )
+
+    # Evaluate every candidate trial concurrently. On the LLM path each trial is
+    # a separate ~30s structured-output call, so sequential evaluation makes a
+    # multi-trial run impractically slow; gather keeps the run at roughly the
+    # cost of a single call regardless of trial count.
+    evaluated = await asyncio.gather(*(_evaluate_trial(t) for t in trials))
+
+    verdicts: dict[str, TrialVerdict] = {}
+    stats_by_trial: list[LlmStats] = []
+    for nct_id, verdict, stats in evaluated:
+        verdicts[nct_id] = verdict
         if stats is not None:
             stats_by_trial.append(stats)
-        verdicts[trial.nct_id] = _aggregate(
-            trial.nct_id, trial.brief_title, criterion_verdicts
-        )
+
     result: dict[str, Any] = {"verdicts": verdicts}
     run_stats = _aggregate_stats(stats_by_trial)
     if run_stats is not None:

@@ -79,7 +79,11 @@ async def match(
     accept: Annotated[str, Header()] = "",
 ) -> MatchReport | EventSourceResponse:
     graph = build_graph(clinicaltrials_client=ct_client)
-    state = init_state(_raw_input(request), request.input_mode)
+    state = init_state(
+        _raw_input(request),
+        request.input_mode,
+        max_results=request.options.max_results,
+    )
 
     if "text/event-stream" in accept.lower():
         return EventSourceResponse(_event_stream(graph, state))

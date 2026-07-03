@@ -36,6 +36,7 @@ class AgentState(TypedDict, total=False):
     # ---- Input ----------------------------------------------------------
     raw_input: str | dict[str, Any]
     input_mode: InputMode
+    max_results: int  # cap on candidate trials evaluated (from MatchOptions)
 
     # ---- Resolved entities (populated as the graph runs) ----------------
     patient: PatientProfile | None
@@ -57,11 +58,17 @@ class AgentState(TypedDict, total=False):
     errors: Annotated[list[str], add]
 
 
-def init_state(raw_input: str | dict[str, Any], input_mode: InputMode) -> AgentState:
+def init_state(
+    raw_input: str | dict[str, Any],
+    input_mode: InputMode,
+    *,
+    max_results: int = 10,
+) -> AgentState:
     """Build a fresh AgentState with empty collections for a new run."""
     return AgentState(
         raw_input=raw_input,
         input_mode=input_mode,
+        max_results=max_results,
         patient=None,
         candidate_trials=[],
         parsed_criteria={},

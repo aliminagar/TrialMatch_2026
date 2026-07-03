@@ -64,6 +64,30 @@ def test_match_structured_returns_ranked_report(
     assert body["disclaimer"]
 
 
+def test_match_caps_trials_to_options_max_results(
+    client: TestClient,
+    sample_studies: list[dict[str, Any]],
+    sample_patients: list[dict[str, Any]],
+    make_mock_ct_client: MakeClient,
+) -> None:
+    assert len(sample_studies) >= 2, "fixture must have >1 study to test the cap"
+    app.dependency_overrides[get_ct_client] = lambda: make_mock_ct_client(sample_studies)
+    try:
+        response = client.post(
+            "/api/v1/match",
+            json={
+                "input_mode": "structured",
+                "patient": sample_patients[0],
+                "options": {"max_results": 1},
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert len(response.json()["trial_verdicts"]) == 1
+
+
 def test_match_rejects_structured_request_without_patient(client: TestClient) -> None:
     # MatchRequest's validator requires a patient in structured mode -> 422.
     response = client.post("/api/v1/match", json={"input_mode": "structured"})

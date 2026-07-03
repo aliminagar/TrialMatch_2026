@@ -51,13 +51,19 @@ def make_trial_discovery(
         condition = _condition_query(patient)
         location = _location_query(patient.geographic_constraint)
 
+        # Cap candidate trials to the request's max_results: each trial is a
+        # separate LLM evaluation downstream, so this bounds run cost and time.
+        # Fetch only as many as we'll keep (top-N by registry relevance).
+        limit = state.get("max_results") or page_size
+        effective_page_size = min(page_size, limit)
+
         try:
             trials = await _search(
                 client=client,
                 condition=condition,
                 location=location,
                 status=status_filter,
-                page_size=page_size,
+                page_size=effective_page_size,
             )
         except ClinicalTrialsError as exc:
             return {
@@ -70,7 +76,7 @@ def make_trial_discovery(
                 "errors": [f"trial_discovery: search failed — {exc}"],
             }
 
-        return {"candidate_trials": trials}
+        return {"candidate_trials": trials[:limit]}
 
     return trial_discovery
 
@@ -105,7 +111,15 @@ def _condition_query(patient: PatientProfile) -> str:
 
 
 def _location_query(geo: GeoConstraint | None) -> str | None:
+    """Build a ClinicalTrials.gov ``query.locn`` term from the geo constraint.
+
+    The registry's location search does free-text geo matching and reliably
+    resolves a single locality name (e.g. "Los Angeles"). The compact
+    "City, XX, US" form — city plus 2-letter state and country codes — instead
+    returns zero results, so send the most specific single locality term
+    available (city, else state, else country) rather than the comma-joined
+    triple.
+    """
     if geo is None:
         return None
-    parts = [p for p in (geo.city, geo.state, geo.country) if p]
-    return ", ".join(parts) if parts else None
+    return geo.city or geo.state or geo.country or None

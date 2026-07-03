@@ -100,7 +100,19 @@ async def test_discovery_builds_location_from_geo_constraint() -> None:
 
     await node(state)
 
-    assert spy.calls[0]["location"] == "Shreveport, LA, US"
+    # Most specific single locality term — the comma-joined "City, XX, US" form
+    # returns zero results from ClinicalTrials.gov's query.locn.
+    assert spy.calls[0]["location"] == "Shreveport"
+
+
+def test_location_query_falls_back_from_city_to_state_to_country() -> None:
+    from trialmatch.agents.nodes.trial_discovery import _location_query
+
+    assert _location_query(None) is None
+    full = GeoConstraint(country="US", state="LA", city="Shreveport")
+    assert _location_query(full) == "Shreveport"
+    assert _location_query(GeoConstraint(country="US", state="LA")) == "LA"
+    assert _location_query(GeoConstraint(country="US")) == "US"
 
 
 async def test_discovery_respects_custom_status_and_page_size() -> None:
@@ -113,6 +125,19 @@ async def test_discovery_respects_custom_status_and_page_size() -> None:
 
     assert spy.calls[0]["status"] == "COMPLETED"
     assert spy.calls[0]["page_size"] == 5
+
+
+async def test_discovery_caps_candidate_trials_to_max_results() -> None:
+    spy = _SpyClient(trials=[_trial(f"NCT0000000{i}") for i in range(1, 5)])  # 4 trials
+    node = make_trial_discovery(spy)  # type: ignore[arg-type]
+    state = init_state(raw_input={}, input_mode="structured", max_results=2)
+    state["patient"] = _patient()
+
+    out = await node(state)
+
+    # Only the top max_results trials are kept, and we fetch just that many.
+    assert len(out["candidate_trials"]) == 2
+    assert spy.calls[0]["page_size"] == 2
 
 
 async def test_discovery_returns_error_on_clinicaltrials_error() -> None:
