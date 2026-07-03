@@ -1,84 +1,91 @@
-import { Activity, Github } from "lucide-react";
+"use client";
 
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { VerdictBadge } from "@/components/VerdictBadge";
-import { VerdictSummary } from "@/components/VerdictSummary";
-import { SAMPLE_TRIAL_VERDICT } from "@/lib/sample";
+import { AlertTriangle, PlugZap, SearchX, Stethoscope } from "lucide-react";
+import { useRef } from "react";
 
-const STACK = ["LangGraph", "FastAPI", "Claude", "Next.js"];
+import { ActivityFeed } from "@/components/ActivityFeed";
+import { Footer } from "@/components/Footer";
+import { Header } from "@/components/Header";
+import { PipelineStepper } from "@/components/PipelineStepper";
+import { ProfileForm } from "@/components/ProfileForm";
+import { ResultsView } from "@/components/ResultsView";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { useMatchRun } from "@/hooks/useMatchRun";
+import type { PatientProfile } from "@/lib/types";
 
-/**
- * Stage 3 design preview. Shows the design language (tokens, fonts, theme) and
- * the representative VerdictSummary + ScoreRing so the look can be reviewed in
- * both light and dark mode before the full component layer is built.
- */
 export default function HomePage() {
+  const { state, run, cancel, reset, running } = useMatchRun();
+  const lastReq = useRef<{ patient: PatientProfile; maxResults: number } | null>(null);
+
+  function handleSubmit(patient: PatientProfile, maxResults: number) {
+    lastReq.current = { patient, maxResults };
+    void run(patient, maxResults);
+  }
+
+  function retry() {
+    if (lastReq.current) void run(lastReq.current.patient, lastReq.current.maxResults);
+    else reset();
+  }
+
+  const result = state.result;
+  const hasTrials = (result?.trial_verdicts.length ?? 0) > 0;
+
   return (
     <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-5 py-8 sm:px-8">
-      <header className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent-subtle text-accent">
-            <Activity className="h-5 w-5" strokeWidth={2.25} aria-hidden />
-          </span>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight text-fg">TrialMatch AI</h1>
-            <p className="text-sm text-fg-muted">
-              Agentic clinical trial eligibility matching, grounded in the trial&apos;s own
-              words.
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <a
-            href="https://github.com/alirezaminagar/trialmatch-ai"
-            target="_blank"
-            rel="noreferrer"
-            aria-label="View source on GitHub"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-surface text-fg-muted transition-colors hover:border-border-strong hover:text-fg"
-          >
-            <Github className="h-[18px] w-[18px]" aria-hidden />
-          </a>
-          <ThemeToggle />
-        </div>
-      </header>
+      <Header />
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        {STACK.map((s) => (
-          <span
-            key={s}
-            className="rounded-full border border-border bg-surface-2 px-2.5 py-1 text-xs font-medium text-fg-muted"
-          >
-            {s}
-          </span>
-        ))}
-      </div>
-
-      <main className="mt-10 flex flex-1 flex-col gap-8">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
-            Design preview · Stage 3
-          </p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-fg">
-            Verdict summary
-          </h2>
+      <main className="mt-10 grid flex-1 gap-8 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+        <div className="lg:sticky lg:top-8 lg:self-start">
+          <ProfileForm onSubmit={handleSubmit} onCancel={cancel} running={running} />
         </div>
 
-        <VerdictSummary trial={SAMPLE_TRIAL_VERDICT} />
+        <div className="flex flex-col gap-6">
+          <PipelineStepper state={state} />
 
-        <section className="rounded-2xl border border-border bg-surface p-6 shadow-card">
-          <p className="mb-4 text-xs font-medium uppercase tracking-wider text-fg-subtle">
-            Verdict palette (WCAG AA, both themes)
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <VerdictBadge verdict="LIKELY_MATCH" size="md" />
-            <VerdictBadge verdict="NEEDS_REVIEW" size="md" />
-            <VerdictBadge verdict="LIKELY_NO_MATCH" size="md" />
-            <VerdictBadge verdict="PASS" size="sm" />
-            <VerdictBadge verdict="INSUFFICIENT_INFO" size="sm" />
-            <VerdictBadge verdict="FAIL" size="sm" />
-          </div>
-        </section>
+          {state.activityLog.length > 0 && state.status !== "done" && (
+            <ActivityFeed lines={state.activityLog} />
+          )}
+
+          {state.status === "idle" && (
+            <EmptyState
+              icon={Stethoscope}
+              title="Ready to match"
+              description="Enter a patient profile — or load the sample patient — and run a match to see the agentic pipeline evaluate each eligibility criterion in real time."
+            />
+          )}
+
+          {state.status === "error" && (
+            <EmptyState
+              icon={state.error?.code === "stream_interrupted" ? PlugZap : AlertTriangle}
+              tone="error"
+              title={
+                state.error?.code === "stream_interrupted"
+                  ? "Run interrupted"
+                  : "Something went wrong"
+              }
+              description={
+                state.error?.message ?? "The match run failed before producing a report."
+              }
+              action={{ label: "Try again", onClick: retry }}
+            />
+          )}
+
+          {state.status === "done" && result && hasTrials && (
+            <ResultsView report={result} />
+          )}
+
+          {state.status === "done" && result && !hasTrials && (
+            <EmptyState
+              icon={SearchX}
+              title="No matching trials found"
+              description="No candidate trials were discovered for this profile. Try broadening the diagnosis or removing the location filter."
+              action={{ label: "Adjust profile", onClick: reset }}
+            />
+          )}
+        </div>
       </main>
+
+      <Footer />
     </div>
   );
 }

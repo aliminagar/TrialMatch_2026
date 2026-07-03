@@ -179,6 +179,39 @@ export type StreamEvent =
   | FinalResultEvent
   | ErrorEvent;
 
+// ---- trial detail (GET /api/v1/trials/{nct_id}, models/trial.py) -----------
+// Only the fields the results header uses; the full Trial model has more.
+
+export type TrialPhase =
+  | "EARLY_PHASE1"
+  | "PHASE1"
+  | "PHASE1_PHASE2"
+  | "PHASE2"
+  | "PHASE2_PHASE3"
+  | "PHASE3"
+  | "PHASE4"
+  | "NA";
+
+export type RecruitmentStatus =
+  | "RECRUITING"
+  | "NOT_YET_RECRUITING"
+  | "ACTIVE_NOT_RECRUITING"
+  | "ENROLLING_BY_INVITATION"
+  | "COMPLETED"
+  | "SUSPENDED"
+  | "TERMINATED"
+  | "WITHDRAWN"
+  | "UNKNOWN";
+
+export interface TrialDetail {
+  nct_id: string;
+  brief_title: string;
+  official_title?: string | null;
+  phase?: TrialPhase | null;
+  overall_status?: RecruitmentStatus | null;
+  sponsor?: string | null;
+}
+
 // ---- request payload (models/api.py) ---------------------------------------
 
 export interface MatchOptions {
