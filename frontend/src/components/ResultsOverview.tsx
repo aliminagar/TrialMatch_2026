@@ -3,8 +3,12 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { ExternalLink, Trophy } from "lucide-react";
 
+import { ExportButtons } from "@/components/ExportButtons";
 import { LlmStatsBar } from "@/components/LlmStatsBar";
+import { MatchConfidenceBar } from "@/components/MatchConfidenceBar";
+import { ResultsCharts } from "@/components/ResultsCharts";
 import { VerdictBadge } from "@/components/VerdictBadge";
+import { CountUp } from "@/components/ui/CountUp";
 import { trialUrl } from "@/lib/api";
 import type { MatchReport, TrialVerdict } from "@/lib/types";
 import { aggregateDistribution, topCandidates } from "@/lib/trialViews";
@@ -15,7 +19,10 @@ const SEGMENT_BG: Record<VerdictTone, string> = {
   review: "bg-review-fg",
   fail: "bg-fail-fg",
 };
-const DOT_BG = SEGMENT_BG;
+
+function toneGradient(tone: VerdictTone): string {
+  return `linear-gradient(135deg, var(--${tone}-ring-from), var(--${tone}-ring-to))`;
+}
 
 function VerdictDistribution({ trials }: { trials: TrialVerdict[] }) {
   const dist = aggregateDistribution(trials);
@@ -30,7 +37,7 @@ function VerdictDistribution({ trials }: { trials: TrialVerdict[] }) {
         {dist.map(({ verdict, count }) => (
           <motion.div
             key={verdict}
-            className={SEGMENT_BG[verdictTone(verdict)]}
+            style={{ backgroundImage: toneGradient(verdictTone(verdict)) }}
             initial={{ width: 0 }}
             animate={{ width: `${(count / total) * 100}%` }}
             transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
@@ -41,13 +48,11 @@ function VerdictDistribution({ trials }: { trials: TrialVerdict[] }) {
         {dist.map(({ verdict, count }) => (
           <span key={verdict} className="inline-flex items-center gap-1.5 text-xs">
             <span
-              className={cn("h-2 w-2 rounded-full", DOT_BG[verdictTone(verdict)])}
+              className={cn("h-2 w-2 rounded-full", SEGMENT_BG[verdictTone(verdict)])}
               aria-hidden
             />
-            <span className="font-semibold tabular-nums text-fg">{count}</span>
-            <span className="text-fg-muted">
-              {verdict.replace(/_/g, " ").toLowerCase()}
-            </span>
+            <CountUp value={count} className="font-semibold tabular-nums text-fg" />
+            <span className="text-fg-muted">{verdict.replace(/_/g, " ").toLowerCase()}</span>
           </span>
         ))}
       </div>
@@ -60,35 +65,39 @@ function TopCandidate({ trial, primary }: { trial: TrialVerdict; primary: boolea
   return (
     <div
       className={cn(
-        "flex items-center gap-3 rounded-xl border p-3",
-        primary
-          ? "border-accent-strong/40 bg-accent-subtle"
-          : "border-border bg-surface-2",
+        "flex flex-col gap-2.5 rounded-xl border p-3 transition-shadow hover:shadow-card",
+        primary ? "border-accent-strong/40 bg-accent-subtle" : "border-border bg-surface-2",
       )}
     >
-      <span
-        className={cn(
-          "flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg text-sm font-semibold tabular-nums",
-          SEGMENT_BG[tone],
-          "text-accent-contrast",
-        )}
-        title={`Score ${trial.score.toFixed(2)}`}
-      >
-        {trial.score.toFixed(2)}
-      </span>
-      <div className="min-w-0 flex-1">
-        <a
-          href={trialUrl(trial.nct_id)}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 font-mono text-xs font-medium text-accent hover:opacity-80"
+      <div className="flex items-start gap-3">
+        <span
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sm font-semibold tabular-nums text-white shadow-card"
+          style={{ backgroundImage: toneGradient(tone) }}
+          title={`Score ${trial.score.toFixed(2)}`}
         >
-          {trial.nct_id}
-          <ExternalLink size={11} aria-hidden />
-        </a>
-        <p className="truncate text-sm text-fg">{trial.title}</p>
+          {trial.score.toFixed(2)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <a
+              href={trialUrl(trial.nct_id)}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex shrink-0 items-center gap-1 font-mono text-xs font-medium text-accent hover:opacity-80"
+            >
+              {trial.nct_id}
+              <ExternalLink size={11} aria-hidden />
+            </a>
+            <VerdictBadge
+              verdict={trial.aggregate_verdict}
+              size="sm"
+              className="shrink-0"
+            />
+          </div>
+          <p className="mt-1 line-clamp-2 text-sm text-fg">{trial.title}</p>
+        </div>
       </div>
-      <VerdictBadge verdict={trial.aggregate_verdict} size="sm" />
+      <MatchConfidenceBar trial={trial} />
     </div>
   );
 }
@@ -106,15 +115,20 @@ export function ResultsOverview({ report }: { report: MatchReport }) {
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
       className="flex flex-col gap-5 rounded-2xl border border-border bg-surface p-6 shadow-card"
     >
-      <div>
-        <h2 className="text-xl font-semibold tracking-tight text-fg">
-          <span className="tabular-nums">{trials.length}</span>{" "}
-          {trials.length === 1 ? "trial" : "trials"} evaluated
-        </h2>
-        <p className="mt-1 text-sm text-fg-muted">{report.summary}</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight text-fg">
+            <CountUp value={trials.length} className="tabular-nums" />{" "}
+            {trials.length === 1 ? "trial" : "trials"} evaluated
+          </h2>
+          <p className="mt-1 text-sm text-fg-muted">{report.summary}</p>
+        </div>
+        <ExportButtons report={report} />
       </div>
 
       {trials.length > 0 && <VerdictDistribution trials={trials} />}
+
+      {trials.length > 0 && <ResultsCharts trials={trials} />}
 
       {top.length > 0 && (
         <motion.div

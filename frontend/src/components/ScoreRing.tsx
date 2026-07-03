@@ -1,15 +1,9 @@
 "use client";
 
 import { animate, motion, useReducedMotion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import type { VerdictTone } from "@/lib/utils";
-
-const TONE_STROKE: Record<VerdictTone, string> = {
-  pass: "var(--pass-fg)",
-  review: "var(--review-fg)",
-  fail: "var(--fail-fg)",
-};
 
 export interface ScoreRingProps {
   /** 0..1 match score. */
@@ -29,6 +23,7 @@ export function ScoreRing({
 }: ScoreRingProps) {
   const reduce = useReducedMotion();
   const [display, setDisplay] = useState(reduce ? value : 0);
+  const gradId = useId();
 
   const clamped = Math.max(0, Math.min(1, value));
   const r = (size - strokeWidth) / 2;
@@ -56,6 +51,12 @@ export function ScoreRing({
       aria-label={`Match ${label} ${clamped.toFixed(2)} out of 1.00`}
     >
       <svg width={size} height={size} className="-rotate-90">
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor={`var(--${tone}-ring-from)`} />
+            <stop offset="100%" stopColor={`var(--${tone}-ring-to)`} />
+          </linearGradient>
+        </defs>
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -69,7 +70,7 @@ export function ScoreRing({
           cy={size / 2}
           r={r}
           fill="none"
-          stroke={TONE_STROKE[tone]}
+          stroke={`url(#${gradId})`}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={c}
@@ -77,6 +78,22 @@ export function ScoreRing({
           animate={{ strokeDashoffset: offset }}
           transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
         />
+        {!reduce && (
+          <motion.circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke="#ffffff"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={c}
+            style={{ mixBlendMode: "overlay" }}
+            initial={{ strokeDashoffset: c, opacity: 0 }}
+            animate={{ strokeDashoffset: offset, opacity: [0, 0.5, 0] }}
+            transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+          />
+        )}
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span

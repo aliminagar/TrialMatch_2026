@@ -7,9 +7,10 @@ import type { AggregateVerdict, Verdict } from "@/lib/types";
 import { cn, verdictLabel, verdictTone, type VerdictTone } from "@/lib/utils";
 
 const TONE_CLASS: Record<VerdictTone, string> = {
-  pass: "bg-pass-bg text-pass-fg border-pass-border",
-  review: "bg-review-bg text-review-fg border-review-border",
-  fail: "bg-fail-bg text-fail-fg border-fail-border",
+  pass: "bg-gradient-to-br from-[var(--pass-grad-from)] to-[var(--pass-grad-to)] text-pass-fg border-pass-border",
+  review:
+    "bg-gradient-to-br from-[var(--review-grad-from)] to-[var(--review-grad-to)] text-review-fg border-review-border",
+  fail: "bg-gradient-to-br from-[var(--fail-grad-from)] to-[var(--fail-grad-to)] text-fail-fg border-fail-border",
 };
 
 const TONE_ICON: Record<VerdictTone, typeof CircleCheck> = {

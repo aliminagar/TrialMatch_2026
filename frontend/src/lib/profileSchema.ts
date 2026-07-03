@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { SAMPLE_PROFILES } from "./sample";
 import type { PatientProfile } from "./types";
 
 // Case-insensitive on input; the backend stores/validates uppercase ICD-10.
@@ -16,6 +17,7 @@ export const profileSchema = z.object({
   icd10: z.string().trim().regex(ICD10, "Format like C50.911"),
   ecog: z.enum(["0", "1", "2", "3", "4"]).nullable(),
   medications: z.array(z.string()),
+  priorTreatments: z.array(z.string()),
   city: z.string().trim().optional(),
   state: z.string().trim().optional(),
   country: z
@@ -30,8 +32,21 @@ export const profileSchema = z.object({
 export type ProfileFormInput = z.input<typeof profileSchema>;
 export type ProfileFormValues = z.output<typeof profileSchema>;
 
-/** Map validated form values onto the backend PatientProfile shape. */
-export function toPatientProfile(v: ProfileFormValues): PatientProfile {
+/**
+ * Fields the backend PatientProfile has but the form does not edit
+ * (labs and comorbidities). Carried alongside the form and merged on submit so
+ * a loaded sample's richer data still reaches the evaluator.
+ */
+export interface ProfileExtras {
+  lab_values: PatientProfile["lab_values"];
+  comorbidities: PatientProfile["comorbidities"];
+}
+
+/** Map validated form values (+ carried extras) onto the backend shape. */
+export function toPatientProfile(
+  v: ProfileFormValues,
+  extras: ProfileExtras = { lab_values: {}, comorbidities: [] },
+): PatientProfile {
   const country = v.country?.trim().toUpperCase() || "";
   return {
     age: v.age,
@@ -40,45 +55,45 @@ export function toPatientProfile(v: ProfileFormValues): PatientProfile {
       icd10: v.icd10.trim().toUpperCase(),
       description: v.diagnosis.trim() || null,
     },
-    comorbidities: [],
+    comorbidities: extras.comorbidities,
     current_medications: v.medications,
     ecog_performance_status: v.ecog !== null ? Number(v.ecog) : null,
-    lab_values: {},
-    prior_treatments: [],
+    lab_values: extras.lab_values,
+    prior_treatments: v.priorTreatments,
     geographic_constraint: country
-      ? {
-          country,
-          state: v.state?.trim() || null,
-          city: v.city?.trim() || null,
-        }
+      ? { country, state: v.state?.trim() || null, city: v.city?.trim() || null }
       : null,
   };
 }
 
-/** The one-click demo patient (58F breast cancer, ECOG 1, LA/US). */
-export const SAMPLE_FORM_VALUES: ProfileFormValues = {
-  age: 58,
-  sex: "female",
-  diagnosis: "Malignant neoplasm of breast",
-  icd10: "C50.911",
-  ecog: "1",
-  medications: ["metformin", "lisinopril"],
-  city: "Los Angeles",
-  state: "CA",
-  country: "US",
-};
+/** Reverse map: a full PatientProfile → the editable form fields. */
+export function patientToFormValues(p: PatientProfile): ProfileFormValues {
+  return {
+    age: p.age,
+    sex: p.sex,
+    diagnosis: p.primary_diagnosis.description ?? "",
+    icd10: p.primary_diagnosis.icd10,
+    ecog:
+      p.ecog_performance_status !== null && p.ecog_performance_status !== undefined
+        ? (String(p.ecog_performance_status) as ProfileFormValues["ecog"])
+        : null,
+    medications: p.current_medications,
+    priorTreatments: p.prior_treatments,
+    city: p.geographic_constraint?.city ?? "",
+    state: p.geographic_constraint?.state ?? "",
+    country: p.geographic_constraint?.country ?? "US",
+  };
+}
 
-export const EMPTY_FORM_VALUES: ProfileFormValues = {
-  age: 0,
-  sex: "female",
-  diagnosis: "",
-  icd10: "",
-  ecog: null,
-  medications: [],
-  city: "",
-  state: "",
-  country: "US",
-};
+/** The non-form extras carried by a PatientProfile (labs, comorbidities). */
+export function extrasOf(p: PatientProfile): ProfileExtras {
+  return { lab_values: p.lab_values, comorbidities: p.comorbidities };
+}
+
+/** Default form = the first sample profile (minimal breast-cancer patient). */
+export const SAMPLE_FORM_VALUES: ProfileFormValues = patientToFormValues(
+  SAMPLE_PROFILES[0].patient,
+);
 
 export const ECOG_DESCRIPTIONS: Record<string, string> = {
   "0": "Fully active, no restrictions",

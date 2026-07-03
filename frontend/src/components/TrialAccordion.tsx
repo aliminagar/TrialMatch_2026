@@ -5,6 +5,7 @@ import { ChevronRight, ExternalLink } from "lucide-react";
 import { useId, useState } from "react";
 
 import { CriteriaTable } from "@/components/CriteriaTable";
+import { MatchConfidenceBar } from "@/components/MatchConfidenceBar";
 import { ScoreRing } from "@/components/ScoreRing";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { trialUrl } from "@/lib/api";
@@ -45,7 +46,7 @@ export function TrialAccordion({
   const counts = verdictCounts(trial);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
+    <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-card transition-shadow hover:shadow-card-lg">
       <div className="relative">
         <button
           type="button"
@@ -83,6 +84,7 @@ export function TrialAccordion({
                 ))}
               </span>
             </div>
+            <MatchConfidenceBar trial={trial} className="mt-2.5 max-w-sm" />
           </div>
         </button>
 

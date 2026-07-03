@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  extrasOf,
+  patientToFormValues,
   profileSchema,
   SAMPLE_FORM_VALUES,
   toPatientProfile,
 } from "@/lib/profileSchema";
+import { SAMPLE_PROFILES } from "@/lib/sample";
 
 describe("profileSchema", () => {
   it("accepts the sample patient", () => {
@@ -69,5 +72,41 @@ describe("toPatientProfile", () => {
   it("maps a null ECOG to null", () => {
     const patient = toPatientProfile({ ...SAMPLE_FORM_VALUES, ecog: null });
     expect(patient.ecog_performance_status).toBeNull();
+  });
+});
+
+describe("sample profile loading", () => {
+  const rich = SAMPLE_PROFILES.find((p) => p.id === "breast-rich")!.patient;
+
+  it("every sample profile's form values pass validation", () => {
+    for (const p of SAMPLE_PROFILES) {
+      expect(profileSchema.safeParse(patientToFormValues(p.patient)).success).toBe(true);
+    }
+  });
+
+  it("maps a rich profile to editable form values (labs stay as extras)", () => {
+    const fv = patientToFormValues(rich);
+    expect(fv.diagnosis).toMatch(/HR-positive/i);
+    expect(fv.icd10).toBe("C50.911");
+    expect(fv.ecog).toBe("1");
+    expect(fv.priorTreatments).toHaveLength(2);
+    expect((fv as Record<string, unknown>).lab_values).toBeUndefined();
+  });
+
+  it("carries labs + comorbidities as extras and merges them on submit", () => {
+    const extras = extrasOf(rich);
+    expect(Object.keys(extras.lab_values).length).toBeGreaterThan(0);
+
+    const patient = toPatientProfile(patientToFormValues(rich), extras);
+    expect(Object.keys(patient.lab_values)).toContain("ANC");
+    expect(patient.prior_treatments).toHaveLength(2);
+    expect(patient.comorbidities).toHaveLength(2);
+    expect(patient.primary_diagnosis.description).toMatch(/HER2-negative/i);
+  });
+
+  it("defaults (no extras) produce empty labs/comorbidities", () => {
+    const patient = toPatientProfile(SAMPLE_FORM_VALUES);
+    expect(patient.lab_values).toEqual({});
+    expect(patient.comorbidities).toEqual([]);
   });
 });

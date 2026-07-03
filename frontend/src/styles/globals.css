@@ -3,14 +3,16 @@
 @tailwind utilities;
 
 /*
- * Design tokens. Warm-neutral base + medical-teal accent, with green/amber/rose
- * verdict semantics. All fg-on-bg pairings are chosen for WCAG 2.1 AA contrast
- * in both themes (verdict text tokens ≥ 4.5:1 on their bg tokens).
+ * Design tokens. Warm-neutral base + medical-teal primary + indigo secondary,
+ * with green/amber/rose verdict semantics (flat tint + gradient variants).
+ * Text-on-surface pairings meet WCAG 2.1 AA in both themes; gradient stops are
+ * decorative (rings, bars, badge fills) with text kept on the AA-safe token.
  */
 :root {
   --bg: #faf9f7;
   --surface: #ffffff;
   --surface-2: #f5f4f1;
+  --surface-3: #efeee9;
   --border: #e7e5e0;
   --border-strong: #d6d3cd;
 
@@ -23,24 +25,49 @@
   --accent-contrast: #ffffff;
   --accent-subtle: #f0fdfa;
 
+  --secondary: #4338ca;         /* indigo-700 — secondary text */
+  --secondary-strong: #4f46e5;  /* indigo-600 — graphics */
+  --secondary-subtle: #eef2ff;
+
   --pass-fg: #047857;
   --pass-bg: #ecfdf5;
   --pass-border: #a7f3d0;
+  --pass-grad-from: #ecfdf5;
+  --pass-grad-to: #d1fae5;
+  --pass-ring-from: #34d399;
+  --pass-ring-to: #059669;
+
   --review-fg: #b45309;
   --review-bg: #fffbeb;
   --review-border: #fde68a;
+  --review-grad-from: #fffbeb;
+  --review-grad-to: #fef3c7;
+  --review-ring-from: #fbbf24;
+  --review-ring-to: #d97706;
+
   --fail-fg: #be123c;
   --fail-bg: #fff1f2;
   --fail-border: #fecdd3;
+  --fail-grad-from: #fff1f2;
+  --fail-grad-to: #ffe4e6;
+  --fail-ring-from: #fb7185;
+  --fail-ring-to: #e11d48;
 
   --ring: #0d9488;
   --shadow: 0 1px 2px rgb(28 25 23 / 0.04), 0 8px 24px -12px rgb(28 25 23 / 0.12);
+  --shadow-lg: 0 1px 2px rgb(28 25 23 / 0.05), 0 14px 30px -10px rgb(28 25 23 / 0.16),
+    0 2px 10px -3px rgb(13 148 136 / 0.10);
+
+  --mesh-1: rgb(13 148 136 / 0.16);   /* teal */
+  --mesh-2: rgb(79 70 229 / 0.14);    /* indigo */
+  --glass: rgb(255 255 255 / 0.55);
 }
 
 .dark {
   --bg: #17151a;
   --surface: #201e24;
   --surface-2: #29262d;
+  --surface-3: #322e37;
   --border: #35323b;
   --border-strong: #443f4b;
 
@@ -53,18 +80,42 @@
   --accent-contrast: #0a2521;
   --accent-subtle: #0b2b28;
 
+  --secondary: #a5b4fc;         /* indigo-300 */
+  --secondary-strong: #818cf8;  /* indigo-400 */
+  --secondary-subtle: #1c1b33;
+
   --pass-fg: #6ee7b7;
   --pass-bg: #05271f;
   --pass-border: #0b5f47;
+  --pass-grad-from: #05271f;
+  --pass-grad-to: #0a3e30;
+  --pass-ring-from: #6ee7b7;
+  --pass-ring-to: #34d399;
+
   --review-fg: #fcd34d;
   --review-bg: #2a2008;
   --review-border: #7c5306;
+  --review-grad-from: #2a2008;
+  --review-grad-to: #3a2b0a;
+  --review-ring-from: #fcd34d;
+  --review-ring-to: #f59e0b;
+
   --fail-fg: #fda4af;
   --fail-bg: #2c0b13;
   --fail-border: #9f1239;
+  --fail-grad-from: #2c0b13;
+  --fail-grad-to: #3f0f1d;
+  --fail-ring-from: #fda4af;
+  --fail-ring-to: #fb7185;
 
   --ring: #2dd4bf;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -14px rgb(0 0 0 / 0.6);
+  --shadow-lg: 0 1px 2px rgb(0 0 0 / 0.4), 0 18px 44px -12px rgb(0 0 0 / 0.72),
+    0 2px 12px -3px rgb(45 212 191 / 0.14);
+
+  --mesh-1: rgb(45 212 191 / 0.14);
+  --mesh-2: rgb(129 140 248 / 0.14);
+  --glass: rgb(32 30 36 / 0.55);
 }
 
 @layer base {
@@ -85,6 +136,38 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+}
+
+@layer components {
+  /* Teal→indigo text gradient for the hero wordmark. */
+  .text-gradient {
+    background-image: linear-gradient(
+      110deg,
+      var(--accent-strong),
+      var(--secondary-strong)
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  /* Frosted panel accent. */
+  .glass {
+    background-color: var(--glass);
+    backdrop-filter: blur(10px) saturate(1.2);
+  }
+}
+
+@keyframes float-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(4%, -6%, 0) scale(1.08); }
+}
+@keyframes float-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.05); }
+  50% { transform: translate3d(-5%, 5%, 0) scale(0.95); }
+}
+@keyframes shimmer-sweep {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(220%); }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateDistribution,
   availablePhases,
+  categoryDistribution,
   filterTrials,
   flattenCriteria,
+  scoreRanking,
   sortTrials,
   topCandidates,
   type DetailMap,
@@ -128,5 +130,19 @@ describe("flattenCriteria", () => {
     const flat = flattenCriteria(trials);
     expect(flat).toHaveLength(2 + 3 + 1 + 1);
     expect(flat[0]).toMatchObject({ nctId: "NCT01" });
+  });
+});
+
+describe("categoryDistribution", () => {
+  it("counts criteria by category across all trials", () => {
+    expect(categoryDistribution(trials)).toEqual([{ category: "other", count: 7 }]);
+  });
+});
+
+describe("scoreRanking", () => {
+  it("returns trials ranked by score with verdict, capped at n", () => {
+    const ranked = scoreRanking(trials, 3);
+    expect(ranked.map((r) => r.nctId)).toEqual(["NCT04", "NCT03", "NCT01"]);
+    expect(ranked[0]).toEqual({ nctId: "NCT04", score: 0.82, verdict: "LIKELY_MATCH" });
   });
 });

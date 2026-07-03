@@ -6,6 +6,7 @@
 
 import type {
   AggregateVerdict,
+  CriterionCategory,
   CriterionVerdict,
   TrialDetail,
   TrialVerdict,
@@ -135,4 +136,37 @@ export function flattenCriteria(trials: TrialVerdict[]): FlatCriterion[] {
   return trials.flatMap((t) =>
     t.criteria_verdicts.map((cv) => ({ cv, nctId: t.nct_id, title: t.title })),
   );
+}
+
+export interface CategoryCount {
+  category: CriterionCategory;
+  count: number;
+}
+
+/** Count criteria by category across all trials (surfaces the data model). */
+export function categoryDistribution(trials: TrialVerdict[]): CategoryCount[] {
+  const counts = new Map<CriterionCategory, number>();
+  for (const t of trials) {
+    for (const cv of t.criteria_verdicts) {
+      const cat = cv.criterion.category;
+      counts.set(cat, (counts.get(cat) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+export interface ScoreRankItem {
+  nctId: string;
+  score: number;
+  verdict: AggregateVerdict;
+}
+
+/** Trials ranked by score (desc), capped at `n`, for the ranking bar chart. */
+export function scoreRanking(trials: TrialVerdict[], n = 8): ScoreRankItem[] {
+  return [...trials]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n)
+    .map((t) => ({ nctId: t.nct_id, score: t.score, verdict: t.aggregate_verdict }));
 }

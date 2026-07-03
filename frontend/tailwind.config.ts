@@ -10,6 +10,7 @@ const config: Config = {
         surface: {
           DEFAULT: "var(--surface)",
           2: "var(--surface-2)",
+          3: "var(--surface-3)",
         },
         border: {
           DEFAULT: "var(--border)",
@@ -25,6 +26,11 @@ const config: Config = {
           strong: "var(--accent-strong)",
           contrast: "var(--accent-contrast)",
           subtle: "var(--accent-subtle)",
+        },
+        secondary: {
+          DEFAULT: "var(--secondary)",
+          strong: "var(--secondary-strong)",
+          subtle: "var(--secondary-subtle)",
         },
         pass: {
           fg: "var(--pass-fg)",
@@ -52,6 +58,7 @@ const config: Config = {
       },
       boxShadow: {
         card: "var(--shadow)",
+        "card-lg": "var(--shadow-lg)",
       },
       keyframes: {
         "fade-up": {
@@ -62,10 +69,20 @@ const config: Config = {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.4" },
         },
+        "float-a": {
+          "0%, 100%": { transform: "translate3d(0,0,0) scale(1)" },
+          "50%": { transform: "translate3d(4%,-6%,0) scale(1.08)" },
+        },
+        "float-b": {
+          "0%, 100%": { transform: "translate3d(0,0,0) scale(1.05)" },
+          "50%": { transform: "translate3d(-5%,5%,0) scale(0.95)" },
+        },
       },
       animation: {
         "fade-up": "fade-up 0.4s ease-out both",
         "pulse-ring": "pulse-ring 1.6s ease-in-out infinite",
+        "float-a": "float-a 14s ease-in-out infinite",
+        "float-b": "float-b 18s ease-in-out infinite",
       },
     },
   },

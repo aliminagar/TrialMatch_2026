@@ -39,6 +39,9 @@ export function Footer() {
         </a>
         .
       </p>
+      <p className="mt-4 text-center text-xs text-fg-subtle">
+        Created by Alireza Minagar © 2026. All rights reserved.
+      </p>
     </footer>
   );
 }

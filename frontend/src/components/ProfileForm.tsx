@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Search, Sparkles, X } from "lucide-react";
+import { FlaskConical, Loader2, Search, Sparkles, X } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
 import { useState, type ReactNode } from "react";
 
@@ -10,12 +10,16 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { TagInput } from "@/components/ui/TagInput";
 import {
   ECOG_DESCRIPTIONS,
+  extrasOf,
+  patientToFormValues,
   profileSchema,
   SAMPLE_FORM_VALUES,
   toPatientProfile,
+  type ProfileExtras,
   type ProfileFormInput,
   type ProfileFormValues,
 } from "@/lib/profileSchema";
+import { SAMPLE_PROFILES } from "@/lib/sample";
 import type { PatientProfile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -85,6 +89,10 @@ export interface ProfileFormProps {
 
 export function ProfileForm({ onSubmit, onCancel, running }: ProfileFormProps) {
   const [trials, setTrials] = useState<TrialsChoice>("5");
+  const [profileId, setProfileId] = useState(SAMPLE_PROFILES[0].id);
+  const [extras, setExtras] = useState<ProfileExtras>(
+    extrasOf(SAMPLE_PROFILES[0].patient),
+  );
   const {
     register,
     handleSubmit,
@@ -97,24 +105,55 @@ export function ProfileForm({ onSubmit, onCancel, running }: ProfileFormProps) {
     mode: "onTouched",
   });
 
+  function loadSample(id: string) {
+    const profile = SAMPLE_PROFILES.find((p) => p.id === id);
+    if (!profile) return;
+    setProfileId(id);
+    reset(patientToFormValues(profile.patient));
+    setExtras(extrasOf(profile.patient));
+  }
+
+  const labKeys = Object.keys(extras.lab_values);
+
   return (
     <form
       onSubmit={handleSubmit((values: ProfileFormValues) =>
-        onSubmit(toPatientProfile(values), trialsChoiceToCount(trials)),
+        onSubmit(toPatientProfile(values, extras), trialsChoiceToCount(trials)),
       )}
       className="flex flex-col gap-5 rounded-2xl border border-border bg-surface p-6 shadow-card"
       noValidate
     >
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-fg">Patient profile</h2>
-        <button
-          type="button"
-          onClick={() => reset(SAMPLE_FORM_VALUES)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:border-border-strong hover:text-fg"
-        >
-          <Sparkles size={13} aria-hidden />
-          Load sample patient
-        </button>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-fg">Patient profile</h2>
+          <div className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-2 pl-2">
+            <Sparkles size={13} className="text-accent" aria-hidden />
+            <select
+              aria-label="Load a sample patient"
+              value={profileId}
+              onChange={(e) => loadSample(e.target.value)}
+              className="rounded-lg bg-transparent py-1.5 pr-2 text-xs font-medium text-fg outline-none"
+            >
+              {SAMPLE_PROFILES.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {(labKeys.length > 0 || extras.comorbidities.length > 0) && (
+          <p className="flex items-start gap-1.5 text-xs text-fg-subtle">
+            <FlaskConical size={13} className="mt-0.5 shrink-0 text-accent" aria-hidden />
+            <span>
+              Carrying {labKeys.length > 0 && `${labKeys.length} lab values (${labKeys.join(", ")})`}
+              {labKeys.length > 0 && extras.comorbidities.length > 0 && " and "}
+              {extras.comorbidities.length > 0 &&
+                `${extras.comorbidities.length} comorbiditie${extras.comorbidities.length === 1 ? "y" : "s"}`}{" "}
+              — sent to the evaluator with this profile.
+            </span>
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -150,7 +189,7 @@ export function ProfileForm({ onSubmit, onCancel, running }: ProfileFormProps) {
         <input
           id="diagnosis"
           type="text"
-          placeholder="e.g. Malignant neoplasm of breast"
+          placeholder="e.g. HR-positive, HER2-negative breast cancer, stage IIB"
           className={inputClass}
           {...register("diagnosis")}
         />
@@ -206,6 +245,21 @@ export function ProfileForm({ onSubmit, onCancel, running }: ProfileFormProps) {
         />
       </Field>
 
+      <Field label="Prior treatments" hint="Type and press Enter to add">
+        <Controller
+          control={control}
+          name="priorTreatments"
+          render={({ field }) => (
+            <TagInput
+              ariaLabel="Prior treatments"
+              value={field.value}
+              onChange={field.onChange}
+              placeholder="e.g. tamoxifen"
+            />
+          )}
+        />
+      </Field>
+
       <div className="grid grid-cols-3 gap-3">
         <Field label="City" htmlFor="city">
           <input id="city" type="text" className={inputClass} {...register("city")} />
@@ -224,10 +278,7 @@ export function ProfileForm({ onSubmit, onCancel, running }: ProfileFormProps) {
         </Field>
       </div>
 
-      <Field
-        label="Trials to evaluate"
-        hint="Top matches by relevance — each is one Claude call"
-      >
+      <Field label="Trials to evaluate" hint="Top matches by relevance — each is one Claude call">
         <SegmentedControl
           ariaLabel="Number of trials to evaluate"
           options={TRIALS_OPTIONS.map((o) => ({ ...o }))}
@@ -248,7 +299,7 @@ export function ProfileForm({ onSubmit, onCancel, running }: ProfileFormProps) {
       ) : (
         <button
           type="submit"
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-accent-strong px-4 py-2.5 text-sm font-semibold text-accent-contrast transition-opacity hover:opacity-90"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-accent-strong to-secondary-strong px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
         >
           <Search size={16} aria-hidden />
           Find matching trials
