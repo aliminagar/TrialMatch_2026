@@ -15,6 +15,7 @@ from typing import Annotated, Any, Literal, TypedDict
 from trialmatch.models import (
     ClarificationQuestion,
     Criterion,
+    LlmStats,
     MatchReport,
     PatientProfile,
     Trial,
@@ -41,6 +42,7 @@ class AgentState(TypedDict, total=False):
     candidate_trials: list[Trial]
     parsed_criteria: dict[str, list[Criterion]]   # nct_id -> criteria
     verdicts: dict[str, TrialVerdict]             # nct_id -> verdict
+    llm_stats: LlmStats | None                    # set by match_evaluator on the LLM path
 
     # ---- Control flow ---------------------------------------------------
     clarification_needed: bool
@@ -64,6 +66,7 @@ def init_state(raw_input: str | dict[str, Any], input_mode: InputMode) -> AgentS
         candidate_trials=[],
         parsed_criteria={},
         verdicts={},
+        llm_stats=None,
         clarification_needed=False,
         clarification_questions=[],
         user_clarifications={},

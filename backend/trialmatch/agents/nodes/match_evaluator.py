@@ -34,7 +34,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from trialmatch.agents.state import AgentState
-from trialmatch.models import Criterion, PatientProfile, TrialVerdict
+from trialmatch.models import Criterion, LlmStats, PatientProfile, TrialVerdict
 from trialmatch.models.match import CriterionVerdict, Verdict
 
 logger = logging.getLogger(__name__)
@@ -442,14 +442,15 @@ def _estimate_cost_usd(model: str, input_tokens: int, output_tokens: int) -> flo
 
 def _log_llm_call(
     llm: Any, raw_message: Any, n_criteria: int, latency_s: float
-) -> None:
-    """Emit an auditable per-trial record that Claude was actually called.
+) -> LlmStats:
+    """Build per-trial call stats, emit an auditable log record, and return them.
 
     The evaluator sends all of a trial's criteria in one structured-output
     request, so usage is reported per trial (one API call), not per criterion.
     Token counts come from the model's ``usage_metadata``; cost is approximate.
-    Structured fields are attached via ``extra`` so callers/harnesses can read
-    them off the LogRecord without re-parsing the message.
+    Structured fields are attached via ``extra`` so log consumers can read them
+    off the LogRecord, and the returned ``LlmStats`` lets the graph surface the
+    same numbers in the final report.
     """
     usage = getattr(raw_message, "usage_metadata", None) or {}
     input_tokens = int(usage.get("input_tokens", 0) or 0)
@@ -470,6 +471,28 @@ def _log_llm_call(
             "cost_usd": cost_usd,
             "latency_s": latency_s,
         },
+    )
+    return LlmStats(
+        model=model,
+        api_calls=1,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=cost_usd,
+        latency_s=latency_s,
+    )
+
+
+def _aggregate_stats(stats: list[LlmStats]) -> LlmStats | None:
+    """Sum per-trial LLM stats into one run-level record (None if no LLM calls)."""
+    if not stats:
+        return None
+    return LlmStats(
+        model=stats[-1].model,  # same model across a run
+        api_calls=sum(s.api_calls for s in stats),
+        input_tokens=sum(s.input_tokens for s in stats),
+        output_tokens=sum(s.output_tokens for s in stats),
+        cost_usd=sum(s.cost_usd for s in stats),
+        latency_s=sum(s.latency_s for s in stats),
     )
 
 
@@ -508,7 +531,7 @@ def _llm_human_message(patient: PatientProfile, criteria: list[Criterion]) -> st
 
 async def _llm_evaluate(
     llm: Any, patient: PatientProfile, criteria: list[Criterion]
-) -> list[CriterionVerdict]:
+) -> tuple[list[CriterionVerdict], LlmStats]:
     from langchain_core.messages import HumanMessage, SystemMessage
 
     # include_raw=True returns {"raw": AIMessage, "parsed": model, "parsing_error": ...}
@@ -529,7 +552,7 @@ async def _llm_evaluate(
         raise RuntimeError(
             f"LLM structured output did not parse: {raw_result.get('parsing_error')!r}"
         )
-    _log_llm_call(llm, raw_result.get("raw"), len(criteria), latency_s)
+    stats = _log_llm_call(llm, raw_result.get("raw"), len(criteria), latency_s)
 
     by_index = {v.index: v for v in result.verdicts}
     verdicts: list[CriterionVerdict] = []
@@ -547,12 +570,13 @@ async def _llm_evaluate(
                 source_citation=crit.source_text,
             )
         )
-    return verdicts
+    return verdicts, stats
 
 
 async def _evaluate_criteria(
     patient: PatientProfile, criteria: list[Criterion], llm: Any | None
-) -> list[CriterionVerdict]:
+) -> tuple[list[CriterionVerdict], LlmStats | None]:
+    """Return per-criterion verdicts and, when the LLM path ran, its call stats."""
     if llm is not None and criteria:
         try:
             return await _llm_evaluate(llm, patient, criteria)
@@ -565,7 +589,7 @@ async def _evaluate_criteria(
                 "the deterministic rule evaluator for %d criteria.",
                 type(exc).__name__, exc, len(criteria),
             )
-    return [_evaluate_criterion(patient, c) for c in criteria]
+    return [_evaluate_criterion(patient, c) for c in criteria], None
 
 
 async def match_evaluator(state: AgentState) -> dict[str, Any]:
@@ -578,10 +602,17 @@ async def match_evaluator(state: AgentState) -> dict[str, Any]:
     llm = _build_llm()  # None unless explicitly opted in; keeps tests offline
 
     verdicts: dict[str, TrialVerdict] = {}
+    stats_by_trial: list[LlmStats] = []
     for trial in trials:
         criteria = parsed.get(trial.nct_id, [])
-        criterion_verdicts = await _evaluate_criteria(patient, criteria, llm)
+        criterion_verdicts, stats = await _evaluate_criteria(patient, criteria, llm)
+        if stats is not None:
+            stats_by_trial.append(stats)
         verdicts[trial.nct_id] = _aggregate(
             trial.nct_id, trial.brief_title, criterion_verdicts
         )
-    return {"verdicts": verdicts}
+    result: dict[str, Any] = {"verdicts": verdicts}
+    run_stats = _aggregate_stats(stats_by_trial)
+    if run_stats is not None:
+        result["llm_stats"] = run_stats
+    return result

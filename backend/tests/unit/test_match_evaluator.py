@@ -28,7 +28,7 @@ from trialmatch.agents.nodes.match_evaluator import (
     match_evaluator,
 )
 from trialmatch.models import Criterion, Diagnosis, PatientProfile
-from trialmatch.models.match import CriterionVerdict
+from trialmatch.models.match import CriterionVerdict, LlmStats
 from trialmatch.tools.clinicaltrials import _parse_study
 
 
@@ -364,12 +364,17 @@ async def test_llm_evaluate_maps_verdicts_and_logs(caplog: pytest.LogCaptureFixt
         _crit("ECOG 0-1", category="performance"),
     ]
     with caplog.at_level(logging.INFO, logger="trialmatch.agents.nodes.match_evaluator"):
-        verdicts = await _llm_evaluate(llm, _patient(), criteria)
+        verdicts, stats = await _llm_evaluate(llm, _patient(), criteria)
 
     assert llm.include_raw_seen is True  # we asked for the raw message
     assert [v.verdict for v in verdicts] == ["INSUFFICIENT_INFO", "PASS"]
     # grounding is preserved: each verdict cites its own criterion text
     assert [v.source_citation for v in verdicts] == [c.source_text for c in criteria]
+    # stats are returned for the report, not just logged
+    assert stats.model == "claude-sonnet-4-6"
+    assert stats.api_calls == 1
+    assert stats.input_tokens == 1000 and stats.output_tokens == 500
+    assert stats.cost_usd == pytest.approx(0.0105)
     assert any(getattr(r, "llm_model", None) == "claude-sonnet-4-6" for r in caplog.records)
 
 
@@ -379,13 +384,73 @@ async def test_evaluate_criteria_falls_back_and_warns_on_llm_error(
     llm = _FakeLLM(raises=RuntimeError("boom"))
     criteria = [_crit("ECOG 0-1", category="performance")]
     with caplog.at_level(logging.WARNING, logger="trialmatch.agents.nodes.match_evaluator"):
-        verdicts = await _evaluate_criteria(_patient(), criteria, llm)
+        verdicts, stats = await _evaluate_criteria(_patient(), criteria, llm)
 
-    # Deterministic result still produced (ECOG 1 within 0-1 -> PASS)
+    # Deterministic result still produced (ECOG 1 within 0-1 -> PASS), no stats.
     assert [v.verdict for v in verdicts] == ["PASS"]
+    assert stats is None
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert warnings, "expected a fallback WARNING"
     assert "RuntimeError" in warnings[-1].message and "boom" in warnings[-1].message
+
+
+def test_aggregate_stats_sums_across_trials() -> None:
+    from trialmatch.agents.nodes.match_evaluator import _aggregate_stats
+
+    assert _aggregate_stats([]) is None
+    a = LlmStats(model="claude-sonnet-4-6", api_calls=1, input_tokens=1000,
+                 output_tokens=500, cost_usd=0.0105, latency_s=2.0)
+    b = LlmStats(model="claude-sonnet-4-6", api_calls=1, input_tokens=200,
+                 output_tokens=100, cost_usd=0.0021, latency_s=1.5)
+    agg = _aggregate_stats([a, b])
+    assert agg is not None
+    assert agg.api_calls == 2
+    assert agg.input_tokens == 1200 and agg.output_tokens == 600
+    assert agg.cost_usd == pytest.approx(0.0126)
+    assert agg.latency_s == pytest.approx(3.5)
+
+
+async def test_match_evaluator_surfaces_llm_stats_in_state(
+    monkeypatch: pytest.MonkeyPatch, sample_studies: list[dict[str, Any]]
+) -> None:
+    # Force the node onto the (mocked) LLM path by patching the builder.
+    from trialmatch.agents.nodes import match_evaluator as me
+
+    trials = [_parse_study(s) for s in sample_studies][:1]
+    parsed = (await eligibility_parser({"candidate_trials": trials}))["parsed_criteria"]
+    n = len(parsed[trials[0].nct_id])
+    result = {
+        "raw": _FakeRaw(1500, 900, "claude-sonnet-4-6"),
+        "parsed": _LLMTrialEvaluation(
+            verdicts=[
+                _LLMVerdict(index=i, verdict="PASS", reasoning="ok", confidence=0.8)
+                for i in range(n)
+            ]
+        ),
+        "parsing_error": None,
+    }
+    monkeypatch.setattr(me, "_build_llm", lambda: _FakeLLM(result))
+
+    state = await me.match_evaluator(
+        {"patient": _patient(), "candidate_trials": trials, "parsed_criteria": parsed}
+    )
+    assert "llm_stats" in state
+    stats = state["llm_stats"]
+    assert isinstance(stats, LlmStats)
+    assert stats.api_calls == 1
+    assert stats.input_tokens == 1500 and stats.output_tokens == 900
+
+
+async def test_match_evaluator_omits_llm_stats_on_rules_path(
+    sample_studies: list[dict[str, Any]]
+) -> None:
+    # No opt-in flag -> deterministic path -> no llm_stats key.
+    trials = [_parse_study(s) for s in sample_studies][:1]
+    parsed = (await eligibility_parser({"candidate_trials": trials}))["parsed_criteria"]
+    state = await match_evaluator(
+        {"patient": _patient(), "candidate_trials": trials, "parsed_criteria": parsed}
+    )
+    assert "llm_stats" not in state
 
 
 # ---- LLM path is opt-in and off by default (keeps tests offline) -----------

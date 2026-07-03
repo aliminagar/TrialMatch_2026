@@ -70,5 +70,6 @@ async def report_generator(state: AgentState) -> dict[str, Any]:
         patient=patient,
         trial_verdicts=trial_verdicts,
         summary=_summarize(trial_verdicts),
+        llm_stats=state.get("llm_stats"),
     )
     return {"final_report": report}

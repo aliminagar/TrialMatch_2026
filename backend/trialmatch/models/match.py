@@ -25,6 +25,24 @@ DEFAULT_DISCLAIMER = (
 )
 
 
+class LlmStats(BaseModel):
+    """Per-run Claude usage/cost/latency, present only when the LLM evaluator ran.
+
+    Aggregated across every trial's batched structured-output call in a run. The
+    same numbers are also emitted to the logs by ``match_evaluator._log_llm_call``;
+    surfacing them here lets the API/frontend show them without scraping logs.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: str
+    api_calls: int = Field(ge=0)
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    cost_usd: float = Field(ge=0.0)
+    latency_s: float = Field(ge=0.0)
+
+
 class CriterionVerdict(BaseModel):
     """Per-criterion evaluation result. Every claim must cite source_text."""
 
@@ -81,6 +99,11 @@ class MatchReport(BaseModel):
     run_id: str | None = Field(
         default=None,
         description="LangSmith run_id for trace correlation (Section 16.1).",
+    )
+    llm_stats: LlmStats | None = Field(
+        default=None,
+        description="Claude usage/cost/latency for the run; None on the "
+        "deterministic-rules path.",
     )
     disclaimer: str = DEFAULT_DISCLAIMER
 
