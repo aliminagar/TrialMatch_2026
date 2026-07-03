@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
-
 from trialmatch.agents.nodes.trial_discovery import make_trial_discovery
 from trialmatch.agents.state import init_state
 from trialmatch.models import Diagnosis, GeoConstraint, PatientProfile, Trial
@@ -24,7 +22,9 @@ class _SpyClient:
     the type at runtime so this is safe.
     """
 
-    def __init__(self, *, trials: list[Trial] | None = None, raises: Exception | None = None) -> None:
+    def __init__(
+        self, *, trials: list[Trial] | None = None, raises: Exception | None = None
+    ) -> None:
         self._trials = trials or []
         self._raises = raises
         self.calls: list[dict[str, Any]] = []
@@ -50,7 +50,9 @@ class _SpyClient:
         return self._trials
 
 
-def _patient(*, with_geo: bool = False, description: str | None = "Breast cancer") -> PatientProfile:
+def _patient(
+    *, with_geo: bool = False, description: str | None = "Breast cancer"
+) -> PatientProfile:
     return PatientProfile(
         age=58,
         sex="female",

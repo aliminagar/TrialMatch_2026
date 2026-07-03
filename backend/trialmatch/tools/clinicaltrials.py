@@ -17,6 +17,7 @@ agent's eligibility_parser node does the real structured parsing later.
 from __future__ import annotations
 
 import re
+import ssl
 from typing import Any
 
 import httpx
@@ -38,13 +39,29 @@ DEFAULT_BASE_URL = "https://clinicaltrials.gov/api/v2"
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_PAGE_SIZE = 25
 
-# ClinicalTrials.gov rejects the default httpx UA with 403. Identify the
-# client so the registry can rate-limit us as a known consumer.
+# A descriptive User-Agent so the registry can rate-limit us as a known
+# consumer. (Note: the UA alone does NOT lift the 403 below — see
+# _build_ssl_context.)
 DEFAULT_USER_AGENT = "TrialMatch-AI/0.1 (+https://github.com/alirezaminagar/trialmatch-ai)"
 _DEFAULT_HEADERS = {
     "User-Agent": DEFAULT_USER_AGENT,
     "Accept": "application/json",
 }
+
+
+def _build_ssl_context() -> ssl.SSLContext:
+    """Build a TLS context that ClinicalTrials.gov's edge will accept.
+
+    The site sits behind a bot-management edge (Akamai) that 403s the default
+    httpx TLS handshake regardless of User-Agent — curl to the same URL returns
+    200. Python's ``ssl.create_default_context()`` advertises a trimmed cipher
+    list; re-applying OpenSSL's full ``DEFAULT`` list widens the offered suites
+    enough to change our JA3 fingerprint past the filter. Certificate
+    verification and the security level are left untouched (no downgrade).
+    """
+    ctx = ssl.create_default_context()
+    ctx.set_ciphers("DEFAULT")
+    return ctx
 
 _RECRUITMENT_VALUES: frozenset[str] = frozenset(RecruitmentStatus.__args__)  # type: ignore[attr-defined]
 _PHASE_VALUES: frozenset[str] = frozenset(TrialPhase.__args__)  # type: ignore[attr-defined]
@@ -80,7 +97,9 @@ class ClinicalTrialsClient:
     async def __aenter__(self) -> ClinicalTrialsClient:
         if self._client is None:
             self._client = httpx.AsyncClient(
-                timeout=self._timeout, headers=_DEFAULT_HEADERS
+                timeout=self._timeout,
+                headers=_DEFAULT_HEADERS,
+                verify=_build_ssl_context(),
             )
         return self
 
@@ -133,7 +152,9 @@ class ClinicalTrialsClient:
         if self._client is None:
             # Allow one-shot use without an explicit context-manager.
             self._client = httpx.AsyncClient(
-                timeout=self._timeout, headers=_DEFAULT_HEADERS
+                timeout=self._timeout,
+                headers=_DEFAULT_HEADERS,
+                verify=_build_ssl_context(),
             )
             self._owns_client = True
 

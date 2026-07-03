@@ -1,1 +1,44 @@
-{"_comment": "TODO: Populate with synthetic patient fixtures per PROJECT_PLAN.docx Section 14.1"}
+{
+  "patients": [
+    {
+      "age": 58,
+      "sex": "female",
+      "primary_diagnosis": {"icd10": "C50.911", "description": "Malignant neoplasm of breast"},
+      "comorbidities": [],
+      "current_medications": ["metformin", "lisinopril"],
+      "ecog_performance_status": 1,
+      "lab_values": {},
+      "prior_treatments": [],
+      "geographic_constraint": {"country": "US", "state": "LA"}
+    },
+    {
+      "age": 67,
+      "sex": "male",
+      "primary_diagnosis": {
+        "icd10": "C34.90",
+        "description": "Malignant neoplasm of unspecified part of bronchus or lung"
+      },
+      "comorbidities": [
+        {"icd10": "J44.9", "description": "Chronic obstructive pulmonary disease"}
+      ],
+      "current_medications": ["albuterol", "atorvastatin"],
+      "ecog_performance_status": 2,
+      "lab_values": {
+        "hemoglobin": {"value": 11.2, "unit": "g/dL", "reference_range": "13.5-17.5"}
+      },
+      "prior_treatments": ["carboplatin", "pemetrexed"],
+      "geographic_constraint": {"country": "US", "state": "NY"}
+    },
+    {
+      "age": 45,
+      "sex": "female",
+      "primary_diagnosis": {"icd10": "C50.912", "description": "Malignant neoplasm of left breast"},
+      "comorbidities": [],
+      "current_medications": [],
+      "ecog_performance_status": 0,
+      "lab_values": {},
+      "prior_treatments": [],
+      "geographic_constraint": {"country": "US", "state": "CA"}
+    }
+  ]
+}

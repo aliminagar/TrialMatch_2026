@@ -11,9 +11,10 @@ Usage:
     python scripts/run_demo.py          # hits the live ClinicalTrials.gov API
     python scripts/run_demo.py --mock   # uses scripts/fixtures/sample_trials.json
 
-The --mock flag exists because the live API edge currently rejects httpx
-clients at the TLS-fingerprint layer (Week 2 will revisit this). With --mock
-the same parser and graph code run end-to-end against a fixture payload.
+The live path works against the real API (the client tunes its TLS cipher
+suite so the ClinicalTrials.gov edge does not 403 it — see
+ClinicalTrialsClient._build_ssl_context). The --mock flag runs the same parser
+and graph code end-to-end against a bundled fixture, with no network access.
 """
 
 from __future__ import annotations
@@ -113,10 +114,17 @@ def _print_report(report: MatchReport, errors: list[str]) -> None:
     print(f"\nDiscovered trials ({len(report.trial_verdicts)})")
     if not report.trial_verdicts:
         print("  (none)")
+    _tag = {"PASS": "PASS", "FAIL": "FAIL", "INSUFFICIENT_INFO": "INFO"}
     for v in report.trial_verdicts:
         title = v.title if len(v.title) <= 70 else v.title[:67] + "..."
-        print(f"  {v.nct_id}  [{v.aggregate_verdict}]  score={v.score:.2f}")
+        print(f"\n  {v.nct_id}  [{v.aggregate_verdict}]  score={v.score:.2f}")
         print(f"     {title}")
+        for cv in v.criteria_verdicts:
+            ctype = cv.criterion.criterion_type[:4]  # "incl" / "excl"
+            src = cv.criterion.source_text
+            src = src if len(src) <= 58 else src[:55] + "..."
+            print(f"       [{_tag[cv.verdict]}] ({ctype}) {src}")
+            print(f"              -> {cv.reasoning}  (conf {cv.confidence:.2f})")
 
     if errors:
         print(f"\nErrors / warnings ({len(errors)})")

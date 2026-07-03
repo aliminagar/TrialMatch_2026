@@ -25,7 +25,6 @@ from trialmatch.models import (
     TrialVerdict,
 )
 
-
 # ---- Diagnosis / ICD-10 -----------------------------------------------------
 
 class TestDiagnosis:

@@ -1,1 +1,52 @@
-{"_comment": "TODO: Populate with sample trial fixtures per PROJECT_PLAN.docx Section 14.1"}
+{
+  "_comment": "Realistic ClinicalTrials.gov v2 /studies payload for tests. Two trials (breast, lung) with inclusion+exclusion headers, locations, phases. NCT IDs are synthetic.",
+  "studies": [
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT04000001",
+          "briefTitle": "Adjuvant Endocrine Therapy in Hormone Receptor-Positive Early Breast Cancer",
+          "officialTitle": "A Randomized Phase 3 Trial of Adjuvant Endocrine Therapy in Women With Hormone Receptor-Positive Early-Stage Breast Cancer"
+        },
+        "statusModule": {"overallStatus": "RECRUITING"},
+        "designModule": {"phases": ["PHASE3"], "enrollmentInfo": {"count": 1800}},
+        "conditionsModule": {"conditions": ["Breast Cancer", "Hormone Receptor Positive Breast Cancer"]},
+        "eligibilityModule": {
+          "eligibilityCriteria": "Inclusion Criteria:\n- Female, age >= 18\n- Histologically confirmed hormone receptor-positive breast cancer\n- ECOG performance status 0-2\n\nExclusion Criteria:\n- Prior endocrine therapy for breast cancer\n- Severe hepatic impairment\n- Active second malignancy",
+          "minimumAge": "18 Years",
+          "sex": "FEMALE"
+        },
+        "sponsorCollaboratorsModule": {"leadSponsor": {"name": "National Cancer Institute"}},
+        "contactsLocationsModule": {
+          "locations": [
+            {"facility": "Ochsner Cancer Center", "city": "New Orleans", "state": "Louisiana", "country": "United States", "status": "RECRUITING"}
+          ]
+        }
+      }
+    },
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT04000002",
+          "briefTitle": "Second-Line Immunotherapy in Advanced Non-Small Cell Lung Cancer",
+          "officialTitle": "An Open-Label Phase 2 Study of Immunotherapy in Previously Treated Stage IV Non-Small Cell Lung Cancer"
+        },
+        "statusModule": {"overallStatus": "RECRUITING"},
+        "designModule": {"phases": ["PHASE2"], "enrollmentInfo": {"count": 240}},
+        "conditionsModule": {"conditions": ["Non-Small Cell Lung Cancer", "Metastatic Lung Cancer"]},
+        "eligibilityModule": {
+          "eligibilityCriteria": "Inclusion Criteria:\n- Adults aged 18-75\n- Stage IV non-small cell lung cancer\n- ECOG 0-1\n- At least one prior line of platinum-based chemotherapy\n\nExclusion Criteria:\n- Active brain metastases\n- History of interstitial lung disease\n- LVEF < 50%",
+          "minimumAge": "18 Years",
+          "maximumAge": "75 Years",
+          "sex": "ALL"
+        },
+        "sponsorCollaboratorsModule": {"leadSponsor": {"name": "SWOG Cancer Research Network"}},
+        "contactsLocationsModule": {
+          "locations": [
+            {"facility": "Memorial Sloan Kettering", "city": "New York", "state": "New York", "country": "United States", "status": "RECRUITING"}
+          ]
+        }
+      }
+    }
+  ]
+}

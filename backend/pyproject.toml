@@ -7,30 +7,37 @@ name = "trialmatch"
 version = "0.1.0"
 description = "Multi-agent clinical trial eligibility matching system"
 requires-python = ">=3.11"
+# Version ranges reconciled with the actual installed/working set (2026-06).
+# Floors track the installed major for packages that drifted past their old
+# pins (the langchain/langgraph stack went 0.x -> 1.x; sse-starlette 2.x -> 3.x);
+# every dependency is capped below the next major to stop a silent breaking
+# upgrade like the one that prompted this. Only langgraph's public API is
+# exercised by the code today (agents/graph.py); the rest are forward pins for
+# the Week 2 LLM/API work.
 dependencies = [
-  "langchain>=0.3.0",
-  "langchain-anthropic>=0.2.0",
-  "langchain-openai>=0.2.0",
-  "langgraph>=0.2.0",
-  "langsmith>=0.1.100",
-  "pydantic>=2.7",
-  "pydantic-settings>=2.5",
-  "fastapi>=0.115",
-  "uvicorn[standard]>=0.30",
-  "httpx>=0.27",
-  "tenacity>=9.0",
-  "python-dotenv>=1.0",
-  "sse-starlette>=2.1",
+  "langchain>=1.3,<2",
+  "langchain-anthropic>=1.4,<2",
+  "langchain-openai>=1.2,<2",
+  "langgraph>=1.2,<2",
+  "langsmith>=0.8,<1",
+  "pydantic>=2.7,<3",
+  "pydantic-settings>=2.5,<3",
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.30,<1",
+  "httpx>=0.27,<1",
+  "tenacity>=9,<10",
+  "python-dotenv>=1,<2",
+  "sse-starlette>=3,<4",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.3",
-  "pytest-asyncio>=0.24",
-  "pytest-cov>=5.0",
-  "ruff>=0.6",
-  "mypy>=1.11",
-  "pre-commit>=3.8",
+  "pytest>=8.3,<10",
+  "pytest-asyncio>=1,<2",
+  "pytest-cov>=5,<8",
+  "ruff>=0.15,<1",
+  "mypy>=2,<3",
+  "pre-commit>=3.8,<5",
 ]
 
 [tool.ruff]

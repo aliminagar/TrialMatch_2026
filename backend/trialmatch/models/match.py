@@ -7,7 +7,7 @@ report_generator node produces and what the API streams back to the frontend.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -77,7 +77,7 @@ class MatchReport(BaseModel):
         description="Short human-readable summary, framed per Section 10.1 — "
         "never 'the patient qualifies', always 'criteria appear to be met'.",
     )
-    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     run_id: str | None = Field(
         default=None,
         description="LangSmith run_id for trace correlation (Section 16.1).",
