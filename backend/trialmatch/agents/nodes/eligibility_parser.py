@@ -22,7 +22,7 @@ from typing import Any
 
 from trialmatch.agents.state import AgentState
 from trialmatch.models import Criterion, Trial
-from trialmatch.models.trial import CriterionCategory, CriterionType
+from trialmatch.models.trial import CriterionCategory, CriterionOperator, CriterionType
 
 # Leading list markers to strip: "- ", "* ", "• ", "1. ", "2) ", "(3) ", etc.
 _BULLET = re.compile(r"^\s*(?:[-*•]|\(?\d{1,2}[.)])\s*")
@@ -54,6 +54,17 @@ _CATEGORY_KEYWORDS: tuple[tuple[CriterionCategory, tuple[str, ...]], ...] = (
             "pembrolizumab", "trastuzumab", "concomitant",
         ),
     ),
+    # Reproductive status (pregnancy / breastfeeding / contraception) is checked
+    # before diagnosis and demographic so these criteria never fall into the
+    # demographic age/sex logic — the structured profile does not capture them,
+    # so the evaluator returns INSUFFICIENT_INFO rather than a spurious verdict.
+    (
+        "reproductive",
+        (
+            "pregnan", "breastfeed", "breast-feed", "lactat", "contracept",
+            "childbearing", "child-bearing",
+        ),
+    ),
     (
         "diagnosis",
         (
@@ -67,7 +78,7 @@ _CATEGORY_KEYWORDS: tuple[tuple[CriterionCategory, tuple[str, ...]], ...] = (
         "demographic",
         (
             "age", "years", "female", "male", "women", "men", "menopaus",
-            "adult", "sex", "gender", "pregnan",
+            "adult", "sex", "gender",
         ),
     ),
 )
@@ -95,7 +106,7 @@ def _parse_block(block: str, criterion_type: CriterionType) -> list[Criterion]:
     # "has" reads as "patient must HAVE this property" for inclusion; "lacks"
     # as "patient must LACK it" for exclusion. operator/threshold/field are
     # best-effort metadata here — the evaluator is source_text-driven.
-    operator = "has" if criterion_type == "inclusion" else "lacks"
+    operator: CriterionOperator = "has" if criterion_type == "inclusion" else "lacks"
     return [
         Criterion(
             criterion_type=criterion_type,

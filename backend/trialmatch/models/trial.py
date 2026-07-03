@@ -21,6 +21,7 @@ CriterionCategory = Literal[
     "medication",
     "prior_treatment",
     "performance",
+    "reproductive",
     "other",
 ]
 CriterionOperator = Literal[

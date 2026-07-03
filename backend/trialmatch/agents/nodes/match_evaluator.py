@@ -23,8 +23,13 @@ let the aggregate score treat every PASS/FAIL the same way.
 
 from __future__ import annotations
 
+import json
+import os
 import re
+from pathlib import Path
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 from trialmatch.agents.state import AgentState
 from trialmatch.models import Criterion, PatientProfile, TrialVerdict
@@ -53,13 +58,12 @@ _WEIGHT: dict[Verdict, float] = {
     "FAIL": 0.0,
 }
 
-_AGE_RANGE = re.compile(r"(\d{1,3})\s*(?:-|to|–)\s*(\d{1,3})")
-_AGE_MIN = re.compile(
-    r"(?:>=|≥|at least|older than|minimum age(?: of)?|aged?)\D{0,6}(\d{1,3})"
-)
-_AGE_MAX = re.compile(
-    r"(?:<=|≤|under|younger than|no older than|up to|maximum age(?: of)?)\D{0,6}(\d{1,3})"
-)
+# An age is recognized only when it carries an explicit age token — the word
+# "age"/"aged" or the unit "year(s)"/"yr(s)". This keeps duration values such as
+# "<= 12 months" or "within 2 years of ..." and unrelated numbers from being
+# mis-read as patient ages (the bug that produced false FAILs on real trials).
+_AGE_UNIT = r"(?:years?|yrs?)"
+_AGE_WORD = re.compile(r"\bage[ds]?\b")
 _ECOG_RANGE = re.compile(r"(\d)\s*(?:-|to|–|or)\s*(\d)")
 _ECOG_MAX = re.compile(r"(?:<=|≤|less than or equal to|at most)\s*(\d)")
 _ECOG_SINGLE = re.compile(r"ecog\D*(\d)")
@@ -113,6 +117,49 @@ def _eval_ecog(patient: PatientProfile, source: str) -> EvalResult:
     return ("FAIL", f"Patient ECOG {ecog} is outside the required range {lo}-{hi}.", 0.9)
 
 
+def _first_int(text: str, patterns: tuple[str, ...]) -> int | None:
+    for pat in patterns:
+        m = re.search(pat, text)
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _parse_age_bounds(low: str) -> tuple[int | None, int | None]:
+    """Return (min_age, max_age) from a criterion, requiring an explicit age token.
+
+    Yields (None, None) when no age token is present, so durations like
+    "<= 12 months" or "at least 2 years after ..." are not read as ages.
+    """
+    if not (_AGE_WORD.search(low) or re.search(rf"\d\s*{_AGE_UNIT}\b", low)):
+        return None, None
+
+    range_pats = (
+        r"\bage[ds]?\b\s*(?:of\s*)?(\d{1,3})\s*(?:-|–|to|and)\s*(\d{1,3})",
+        rf"\b(\d{{1,3}})\s*(?:-|–|to|and)\s*(\d{{1,3}})\s*{_AGE_UNIT}\b",
+        rf"\bbetween\s+(\d{{1,3}})\s+and\s+(\d{{1,3}})\s*{_AGE_UNIT}\b",
+    )
+    for pat in range_pats:
+        m = re.search(pat, low)
+        if m:
+            a, b = sorted((int(m.group(1)), int(m.group(2))))
+            return a, b
+
+    hi = _first_int(low, (
+        rf"(?:<=|≤|under|younger than|no older than|up to|maximum age(?: of)?)"
+        rf"\s*(\d{{1,3}})\s*{_AGE_UNIT}\b",
+        r"\bage[ds]?\b\s*(?:of\s*)?(?:<=|≤|<)\s*(\d{1,3})",
+        rf"\b(\d{{1,3}})\s*{_AGE_UNIT}\s+(?:or younger|and younger|or below)\b",
+    ))
+    lo = _first_int(low, (
+        rf"(?:>=|≥|at least|older than|no younger than|minimum age(?: of)?)"
+        rf"\s*(\d{{1,3}})\s*{_AGE_UNIT}\b",
+        r"\bage[ds]?\b\s*(?:of\s*)?(?:>=|≥|>)?\s*(\d{1,3})\b",
+        rf"\b(\d{{1,3}})\s*{_AGE_UNIT}\s+(?:or older|and older|or above)\b",
+    ))
+    return lo, hi
+
+
 def _eval_demographic(patient: PatientProfile, source: str) -> EvalResult:
     """Evaluate a demographic criterion as if it were inclusion (PASS = matches).
 
@@ -128,14 +175,7 @@ def _eval_demographic(patient: PatientProfile, source: str) -> EvalResult:
         ok = patient.sex == "male"
         subs.append(("PASS" if ok else "FAIL", f"sex {patient.sex} vs required male"))
 
-    lo = hi = None
-    if (rng := _AGE_RANGE.search(low)) is not None:
-        lo, hi = sorted((int(rng.group(1)), int(rng.group(2))))
-    else:
-        if (mn := _AGE_MIN.search(low)) is not None:
-            lo = int(mn.group(1))
-        if (mx := _AGE_MAX.search(low)) is not None:
-            hi = int(mx.group(1))
+    lo, hi = _parse_age_bounds(low)
     if lo is not None or hi is not None:
         within = (lo is None or patient.age >= lo) and (hi is None or patient.age <= hi)
         if lo is not None and hi is not None:
@@ -281,6 +321,13 @@ def _evaluate_criterion(patient: PatientProfile, crit: Criterion) -> CriterionVe
         verdict, reasoning, conf = _eval_ecog(patient, src)
     elif cat == "lab":
         verdict, reasoning, conf = _eval_lab(patient, src)
+    elif cat == "reproductive":
+        verdict, reasoning, conf = (
+            "INSUFFICIENT_INFO",
+            "Pregnancy, breastfeeding, or contraception status is not captured in "
+            "the patient profile.",
+            0.3,
+        )
     elif cat == "demographic":
         verdict, reasoning, conf = _eval_demographic(patient, src)
         if ctype == "exclusion":
@@ -345,6 +392,95 @@ def _aggregate(
     )
 
 
+# ---------------------------------------------------------------------------
+# Optional Claude-backed evaluator.
+#
+# When TRIALMATCH_USE_LLM is set and ANTHROPIC_API_KEY is present, each trial's
+# criteria are judged by Claude via structured output against the
+# match_evaluation.txt contract. Any failure (no key, network error, malformed
+# output) falls back to the deterministic evaluator, so tests — which never set
+# the flag — stay fully offline. langchain-anthropic is imported lazily so the
+# offline path never loads it.
+# ---------------------------------------------------------------------------
+
+_PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "match_evaluation.txt"
+
+
+class _LLMVerdict(BaseModel):
+    index: int = Field(description="0-based index of the criterion being judged.")
+    verdict: Verdict
+    reasoning: str
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class _LLMTrialEvaluation(BaseModel):
+    verdicts: list[_LLMVerdict]
+
+
+def _build_llm() -> Any | None:
+    """Return a configured ChatAnthropic, or None to use the deterministic path."""
+    if not os.environ.get("TRIALMATCH_USE_LLM") or not os.environ.get("ANTHROPIC_API_KEY"):
+        return None
+    try:
+        from langchain_anthropic import ChatAnthropic
+    except ImportError:
+        return None
+    model = os.environ.get("MODEL_NAME", "claude-sonnet-4-6")
+    return ChatAnthropic(model=model, temperature=0, max_tokens=8000, timeout=90)
+
+
+def _llm_human_message(patient: PatientProfile, criteria: list[Criterion]) -> str:
+    lines = [f"[{i}] ({c.criterion_type}) {c.source_text}" for i, c in enumerate(criteria)]
+    return (
+        "PATIENT PROFILE (JSON):\n"
+        + json.dumps(patient.model_dump(mode="json"), indent=2)
+        + "\n\nCRITERIA — return exactly one verdict per index:\n"
+        + "\n".join(lines)
+    )
+
+
+async def _llm_evaluate(
+    llm: Any, patient: PatientProfile, criteria: list[Criterion]
+) -> list[CriterionVerdict]:
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    structured = llm.with_structured_output(_LLMTrialEvaluation)
+    result = await structured.ainvoke(
+        [
+            SystemMessage(content=_PROMPT_PATH.read_text(encoding="utf-8")),
+            HumanMessage(content=_llm_human_message(patient, criteria)),
+        ]
+    )
+    by_index = {v.index: v for v in result.verdicts}
+    verdicts: list[CriterionVerdict] = []
+    for i, crit in enumerate(criteria):
+        lv = by_index.get(i)
+        if lv is None:  # model skipped this one -> deterministic fallback for it
+            verdicts.append(_evaluate_criterion(patient, crit))
+            continue
+        verdicts.append(
+            CriterionVerdict(
+                criterion=crit,
+                verdict=lv.verdict,
+                reasoning=lv.reasoning.strip() or "Model returned no reasoning.",
+                confidence=min(1.0, max(0.0, lv.confidence)),
+                source_citation=crit.source_text,
+            )
+        )
+    return verdicts
+
+
+async def _evaluate_criteria(
+    patient: PatientProfile, criteria: list[Criterion], llm: Any | None
+) -> list[CriterionVerdict]:
+    if llm is not None and criteria:
+        try:
+            return await _llm_evaluate(llm, patient, criteria)
+        except Exception:
+            pass  # any LLM failure -> deterministic fallback keeps the run alive
+    return [_evaluate_criterion(patient, c) for c in criteria]
+
+
 async def match_evaluator(state: AgentState) -> dict[str, Any]:
     patient = state.get("patient")
     if not isinstance(patient, PatientProfile):
@@ -352,11 +488,12 @@ async def match_evaluator(state: AgentState) -> dict[str, Any]:
 
     trials = state.get("candidate_trials") or []
     parsed = state.get("parsed_criteria") or {}
+    llm = _build_llm()  # None unless explicitly opted in; keeps tests offline
 
     verdicts: dict[str, TrialVerdict] = {}
     for trial in trials:
         criteria = parsed.get(trial.nct_id, [])
-        criterion_verdicts = [_evaluate_criterion(patient, c) for c in criteria]
+        criterion_verdicts = await _evaluate_criteria(patient, criteria, llm)
         verdicts[trial.nct_id] = _aggregate(
             trial.nct_id, trial.brief_title, criterion_verdicts
         )

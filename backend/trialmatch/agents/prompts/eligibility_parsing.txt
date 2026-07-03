@@ -17,7 +17,8 @@ RULES
 2. criterion_type = "inclusion" for items from inclusion_text, "exclusion" for
    items from exclusion_text.
 3. category = one of: demographic, diagnosis, lab, medication, prior_treatment,
-   performance, other. Choose the dominant clinical dimension of the rule.
+   performance, reproductive, other. Choose the dominant clinical dimension of
+   the rule. Use "reproductive" for pregnancy, breastfeeding, and contraception.
 4. operator / threshold / field: best-effort structured form of the rule
    (e.g. field="age", operator="gte", threshold=18). Leave them null when the
    rule is not cleanly reducible — downstream evaluation falls back to

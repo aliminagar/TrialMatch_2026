@@ -10,10 +10,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from trialmatch.agents.nodes.eligibility_parser import eligibility_parser
+import pytest
+
+from trialmatch.agents.nodes.eligibility_parser import _categorize, eligibility_parser
 from trialmatch.agents.nodes.match_evaluator import (
     _aggregate,
+    _build_llm,
     _evaluate_criterion,
+    _parse_age_bounds,
     match_evaluator,
 )
 from trialmatch.models import Criterion, Diagnosis, PatientProfile
@@ -200,3 +204,68 @@ async def test_match_evaluator_node_over_fixture(
         assert 0.0 <= tv.score <= 1.0
         for cv in tv.criteria_verdicts:
             assert cv.source_citation == cv.criterion.source_text  # grounding
+
+
+# ---- regression: NCT07174336 real-world mis-parses ------------------------
+
+# Verbatim ClinicalTrials.gov criterion texts that produced false FAILs before
+# the parser was hardened: a duration ("<= 12 months") read as an age bound, and
+# a pregnancy rule ("at least 2 years") read as a demographic age.
+NCT07174336_PROGRESSION = (
+    "relapsed with documented evidence of progression less than or equal to "
+    "(≤)12 months of completing (neo)adjuvant ET ± CDK4/6 inhibitor."
+)
+NCT07174336_PREGNANCY = (
+    "Are pregnant, breastfeeding, or intend to become pregnant during the study "
+    "or within 6 months of the last dose of study intervention and at least 2 "
+    "years after the last dose of fulvestrant and/or CDK4/6 inhibitor after the "
+    "final administration of study treatment."
+)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Female, age >= 18", (18, None)),
+        ("Adults aged 18-75", (18, 75)),
+        ("Patients up to 75 years", (None, 75)),
+        ("18 years or older", (18, None)),
+        # duration units and unrelated numbers must NOT be read as ages:
+        ("progression within 12 months", (None, None)),
+        ("stable for at least 2 weeks", (None, None)),
+        (NCT07174336_PROGRESSION, (None, None)),
+    ],
+)
+def test_parse_age_bounds(text: str, expected: tuple[int | None, int | None]) -> None:
+    assert _parse_age_bounds(text.lower()) == expected
+
+
+def test_regression_progression_criterion_not_failed() -> None:
+    # "(≤)12 months" must not be read as "age <= 12" -> was a false FAIL.
+    crit = _crit(NCT07174336_PROGRESSION, category=_categorize(NCT07174336_PROGRESSION))
+    verdict = _evaluate_criterion(_patient(age=58), crit)
+    assert verdict.verdict == "INSUFFICIENT_INFO"
+
+
+def test_regression_pregnancy_criterion_is_reproductive_insufficient() -> None:
+    # Pregnancy/contraception is its own category, never a demographic FAIL.
+    assert _categorize(NCT07174336_PREGNANCY) == "reproductive"
+    crit = _crit(
+        NCT07174336_PREGNANCY, criterion_type="exclusion", category="reproductive"
+    )
+    verdict = _evaluate_criterion(_patient(age=58), crit)
+    assert verdict.verdict == "INSUFFICIENT_INFO"
+
+
+# ---- LLM path is opt-in and off by default (keeps tests offline) -----------
+
+def test_build_llm_disabled_without_optin(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TRIALMATCH_USE_LLM", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-real")
+    assert _build_llm() is None  # no opt-in flag -> deterministic, no network
+
+
+def test_build_llm_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TRIALMATCH_USE_LLM", "1")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert _build_llm() is None  # opted in but no key -> deterministic
