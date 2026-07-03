@@ -20,7 +20,10 @@ export function ConfidenceBar({
   tone: VerdictTone;
 }) {
   const reduce = useReducedMotion();
-  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
+  const clamped = Math.max(0, Math.min(1, value));
+  const pct = Math.round(clamped * 100);
+  // Subtle intensity: low-confidence fills read fainter than high-confidence.
+  const intensity = 0.5 + 0.5 * clamped;
 
   return (
     <div className="flex items-center gap-2" title={`Confidence ${pct}%`}>
@@ -34,6 +37,7 @@ export function ConfidenceBar({
       >
         <motion.div
           className={cn("h-full rounded-full", TONE_FILL[tone])}
+          style={{ opacity: intensity }}
           initial={reduce ? false : { width: 0 }}
           animate={{ width: `${pct}%` }}
           transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}

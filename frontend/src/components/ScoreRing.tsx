@@ -79,12 +79,17 @@ export function ScoreRing({
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl font-semibold tabular-nums text-fg">
+        <span
+          className="font-semibold leading-none tabular-nums text-fg"
+          style={{ fontSize: Math.round(size * 0.24) }}
+        >
           {display.toFixed(2)}
         </span>
-        <span className="text-[11px] font-medium uppercase tracking-wider text-fg-subtle">
-          {label}
-        </span>
+        {size >= 96 && (
+          <span className="mt-1 text-[10px] font-medium uppercase tracking-wider text-fg-subtle">
+            {label}
+          </span>
+        )}
       </div>
     </div>
   );
