@@ -1,3 +1,99 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Design tokens. Warm-neutral base + medical-teal accent, with green/amber/rose
+ * verdict semantics. All fg-on-bg pairings are chosen for WCAG 2.1 AA contrast
+ * in both themes (verdict text tokens ≥ 4.5:1 on their bg tokens).
+ */
+:root {
+  --bg: #faf9f7;
+  --surface: #ffffff;
+  --surface-2: #f5f4f1;
+  --border: #e7e5e0;
+  --border-strong: #d6d3cd;
+
+  --fg: #1c1917;
+  --fg-muted: #57534e;
+  --fg-subtle: #78716c;
+
+  --accent: #0f766e;         /* teal-700 — interactive text */
+  --accent-strong: #0d9488;  /* teal-600 — graphics / ring */
+  --accent-contrast: #ffffff;
+  --accent-subtle: #f0fdfa;
+
+  --pass-fg: #047857;
+  --pass-bg: #ecfdf5;
+  --pass-border: #a7f3d0;
+  --review-fg: #b45309;
+  --review-bg: #fffbeb;
+  --review-border: #fde68a;
+  --fail-fg: #be123c;
+  --fail-bg: #fff1f2;
+  --fail-border: #fecdd3;
+
+  --ring: #0d9488;
+  --shadow: 0 1px 2px rgb(28 25 23 / 0.04), 0 8px 24px -12px rgb(28 25 23 / 0.12);
+}
+
+.dark {
+  --bg: #17151a;
+  --surface: #201e24;
+  --surface-2: #29262d;
+  --border: #35323b;
+  --border-strong: #443f4b;
+
+  --fg: #f5f4f2;
+  --fg-muted: #a8a29e;
+  --fg-subtle: #857f8c;
+
+  --accent: #5eead4;         /* teal-300 */
+  --accent-strong: #2dd4bf;  /* teal-400 */
+  --accent-contrast: #0a2521;
+  --accent-subtle: #0b2b28;
+
+  --pass-fg: #6ee7b7;
+  --pass-bg: #05271f;
+  --pass-border: #0b5f47;
+  --review-fg: #fcd34d;
+  --review-bg: #2a2008;
+  --review-border: #7c5306;
+  --fail-fg: #fda4af;
+  --fail-bg: #2c0b13;
+  --fail-border: #9f1239;
+
+  --ring: #2dd4bf;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -14px rgb(0 0 0 / 0.6);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  ::selection {
+    background: var(--accent-strong);
+    color: var(--accent-contrast);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
