@@ -12,16 +12,15 @@
 ![Tailwind](https://img.shields.io/badge/Tailwind-3-06B6D4?logo=tailwindcss&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-155%20backend%20%2B%2060%20frontend-brightgreen)
 
-<p align="center">
-  <img src="docs/images/01-hero-dark.png" width="49%" alt="TrialMatch AI hero — dark mode" />
-  <img src="docs/images/02-hero-light.png" width="49%" alt="TrialMatch AI hero — light mode" />
-</p>
+<p align="center"><img src="docs/images/01-hero-dark.png" width="80%" alt="TrialMatch AI hero — dark mode" /></p>
 
-**Hero — dark and light.** The landing header: gradient wordmark, tagline, and a technology-stack chip row. The whole app is fully designed in both themes.
+The TrialMatch AI landing header in dark mode: gradient wordmark, tagline, and technology-stack chips (LangGraph, FastAPI, Claude, Next.js). Fully themed for both light and dark.
 
 ---
 
 ## Overview
+
+Matching a patient to the right clinical trial is slow, manual, and error-prone: a research coordinator reads dense eligibility criteria across dozens of trials and checks each rule by hand. **TrialMatch AI automates the first pass** — it pulls candidate trials from ClinicalTrials.gov, breaks each trial's eligibility text into individual rules, and evaluates every rule against the patient, showing its work by quoting the exact trial text behind each decision. The result is a ranked, auditable shortlist a clinician can review in minutes instead of hours — helping coordinators, oncologists, and patients spend less time screening and more time on the trials that actually fit.
 
 **TrialMatch AI** is an agentic clinical-trial eligibility matcher. Given a structured patient profile, it queries the **ClinicalTrials.gov v2** registry for candidate trials, splits each trial's free-text inclusion/exclusion criteria into discrete, structured rules, and judges every rule against the patient — producing a ranked report of `PASS` / `FAIL` / `INSUFFICIENT_INFO` verdicts with reasoning and a confidence score.
 
@@ -42,8 +41,9 @@ The differentiator is **grounding**: every criterion verdict carries the **verba
 - [Project Structure](#project-structure)
 - [Limitations & Roadmap](#limitations--roadmap)
 - [Frontend Details](#frontend-details)
+- [License](#license)
 - [Author](#author)
-- [Screenshot Capture Guide](#screenshot-capture-guide)
+- [Screenshots](#screenshots)
 
 ---
 
@@ -59,11 +59,7 @@ A linear LangGraph state machine threads a typed `AgentState` through five nodes
 
 <p align="center"><img src="docs/images/08-pipeline-running.png" width="80%" alt="Pipeline stepper mid-run" /></p>
 
-**Live pipeline.** The stepper advances as each LangGraph node completes; the active node pulses.
-
-<p align="center"><img src="docs/images/09-pipeline-complete.png" width="80%" alt="Pipeline stepper complete" /></p>
-
-**Pipeline complete.** All five nodes resolved — the run then emits the final report.
+The agentic pipeline streaming live. The stepper shows the first three LangGraph nodes complete with criterion evaluation active, while the activity feed logs each stage in real time over Server-Sent Events.
 
 ### 🎯 Grounded evaluation
 
@@ -71,7 +67,7 @@ Every criterion becomes a `CriterionVerdict`: a `verdict` (`PASS` / `FAIL` / `IN
 
 <p align="center"><img src="docs/images/18-grounded-citation.png" width="85%" alt="A criterion expanded to show the grounded verbatim quote" /></p>
 
-**Grounding — the differentiator.** Expand any criterion to see the exact trial text the verdict was based on, rendered as a monospace quote.
+Grounding — the differentiator. Each criterion expands to reveal the exact verbatim eligibility text it was evaluated against, rendered as a monospace 'grounded in the trial's own words' quote beside the plain-language reasoning. A clinician can audit every verdict against the trial's actual language rather than trusting an opaque score.
 
 ### 🔀 Dual evaluator (rules + optional Claude)
 
@@ -86,51 +82,27 @@ The results overview turns a multi-trial run into something scannable: a headlin
 
 <p align="center"><img src="docs/images/10-overview-dark.png" width="90%" alt="Full results overview with charts" /></p>
 
-**Results overview.** Headline, verdict-distribution bar, data-viz row, and top-candidate callout — the "forest," above the per-trial detail.
-
-<p align="center">
-  <img src="docs/images/11-verdict-donut.png" width="32%" alt="Verdict-mix donut" />
-  <img src="docs/images/12-trials-by-score.png" width="32%" alt="Trials-by-score bar" />
-  <img src="docs/images/13-criteria-by-category.png" width="32%" alt="Criteria-by-category bar" />
-</p>
-
-**Data-viz row.** Verdict-mix **donut**, trials-ranked-**by-score** bar, and criteria-**by-category** bar (the last one surfaces the underlying criterion data model — diagnosis, lab, performance, prior-treatment, reproductive, …).
-
-<p align="center"><img src="docs/images/14-top-candidates.png" width="90%" alt="Top-candidates callout row" /></p>
-
-**Top candidates.** The highest-scoring trials float to the top, each with a score chip, NCT link, aggregate badge, and a gradient Pass/Insufficient/Fail confidence bar.
+The results dashboard after a live run: the completed pipeline, a '5 trials evaluated' summary, the verdict-distribution bar, and three recharts visualizations — verdict-mix donut, trials-by-score, and criteria-by-category. Top-candidate cards surface the highest-scoring trials, and the 'Powered by Claude' bar reports exact API calls, tokens, cost, and latency for the run.
 
 Below the overview, each trial is a **keyboard-accessible collapsible accordion** — a compact always-visible header (NCT link, title, phase/status, verdict badge, small score ring, P/F/I counts) with the full criteria table collapsed by default; only the top-ranked trial auto-expands.
 
 <p align="center"><img src="docs/images/16-trial-accordion.png" width="90%" alt="Collapsed trial accordion header" /></p>
 
-**Collapsible trial card.** The always-visible header; click to expand the criteria table.
+Collapsed trial cards. Each result is a keyboard-accessible accordion whose always-visible header shows the score ring, trial title, NCT link, aggregate verdict badge, phase and recruiting status, and Pass/Fail/Insufficient counts with a gradient confidence bar — click any card to expand its full criteria table.
 
 <p align="center"><img src="docs/images/17-criteria-table.png" width="90%" alt="Expanded criteria table" /></p>
 
-**Criteria table.** Per-criterion verdict, reasoning, and confidence — filter by verdict, full-text search, sort by confidence.
+An expanded trial's criteria table: every eligibility rule with its verdict (PASS / FAIL / INSUFFICIENT_INFO), plain-language reasoning, category tag, and a confidence bar. Filter by verdict, search the criteria, and sort by confidence — here the minimal profile leaves many rules INSUFFICIENT_INFO, the honest 'not enough data' result.
 
 Trials can be **sorted** (score / verdict / phase), **filtered** (by verdict and phase), and **searched** (title / NCT). A **By trial ↔ By verdict** toggle flips to a flattened cross-trial view so you can, for example, read every `FAIL` across all trials at once.
-
-<p align="center"><img src="docs/images/19-by-verdict-view.png" width="90%" alt="By-verdict global cross-trial view" /></p>
-
-**By-verdict view.** Every criterion across all trials in one list — filter to a single verdict to scan the whole match at that altitude.
 
 ### 💰 Cost observability
 
 When the Claude path runs, the per-run **model, API-call count, input/output token counts, approximate USD cost, and latency** are captured (from the model's `usage_metadata`) and ride along on the `final_result` event — surfaced in-app in a "Powered by Claude" stats bar and printed to the backend logs.
 
-<p align="center"><img src="docs/images/15-llm-stats.png" width="80%" alt="Powered by Claude stats bar" /></p>
-
-**Cost transparency.** Model, calls, tokens, cost, and latency for the run — no hidden spend.
-
 ### 📄 Export (PDF + JSON)
 
 One click exports the full report — patient profile, every trial's verdicts with reasoning and grounded citations, and the Claude usage stats — as a formatted **PDF** (generated client-side with jsPDF) or as **JSON** for programmatic use. This is the "clinical coordinator needs to save and share findings" workflow.
-
-<p align="center"><img src="docs/images/20-export-and-light.png" width="90%" alt="Export buttons and light-mode results" /></p>
-
-**Export & light mode.** The Download report / JSON controls, shown here in light theme.
 
 ### 🧑‍⚕️ Sample profiles
 
@@ -142,24 +114,13 @@ The form ships with a **three-profile dropdown** so a first-time visitor can dem
 
 The richer profile measurably improves resolution: on a live run, the same trials went from **7 → 18 `PASS` verdicts** simply by supplying receptor status, labs, and prior treatments — concrete evidence that structured patient data drives better matching.
 
-<p align="center">
-  <img src="docs/images/04-sample-dropdown.png" width="49%" alt="Sample-patient dropdown open" />
-  <img src="docs/images/06-form-filled-rich.png" width="49%" alt="Form filled with the full-workup profile" />
-</p>
-
-**Sample profiles.** The dropdown (left) and the full-workup profile loaded (right) — note the labs indicator confirming the extra data will be sent to the evaluator.
-
 ### 🎛️ Patient form & run controls
 
 A `react-hook-form` + `zod` form with inline validation (ICD-10 pattern, age range, 2-letter country), a segmented ECOG control with grade descriptions, tag inputs for medications and prior treatments, and a **Trials to evaluate** selector (3 / 5 / 10 / All) wired end-to-end to the API's `max_results` cap — because each evaluated trial is one Claude call, this directly bounds run cost and time.
 
-<p align="center">
-  <img src="docs/images/03-empty-form.png" width="32%" alt="Empty patient form, ready-to-match state" />
-  <img src="docs/images/05-form-filled-basic.png" width="32%" alt="Form filled with the minimal profile" />
-  <img src="docs/images/07-trials-selector.png" width="32%" alt="Trials to evaluate selector" />
-</p>
+<p align="center"><img src="docs/images/03-empty-form.png" width="80%" alt="Empty patient form, ready-to-match state" /></p>
 
-**Form states.** Empty (left), filled with the minimal profile (center), and the trials-to-evaluate selector (right).
+The patient profile form in its ready state, with the 'Ready to match' panel awaiting a run. Users enter structured data — or load a sample profile — then launch the agentic pipeline.
 
 ### 🌗 Theming & accessibility
 
@@ -174,7 +135,7 @@ An end-to-end trace of a single run:
 1. **Enter a patient** — fill the structured form (or load a sample profile) and pick how many trials to evaluate.
    <br><img src="docs/images/03-empty-form.png" width="70%" alt="Empty form" />
 2. **Run streams live** — the request opens an SSE stream; the pipeline stepper advances node-by-node as each LangGraph stage completes.
-   <br><img src="docs/images/09-pipeline-complete.png" width="70%" alt="Pipeline complete" />
+   <br><img src="docs/images/08-pipeline-running.png" width="70%" alt="Pipeline streaming live" />
 3. **Read the overview** — the `final_result` lands and the dashboard renders: distribution, charts, top candidates, and the Claude cost bar.
    <br><img src="docs/images/10-overview-dark.png" width="80%" alt="Results overview" />
 4. **Drill into a trial** — expand a trial to read every criterion's verdict, reasoning, and confidence.
@@ -374,6 +335,12 @@ The web app has its own focused README covering the SSE consumption model, the p
 
 ---
 
+## License
+
+**Proprietary and source-available — not open source.** The source is published for **portfolio review, evaluation, and demonstration only**. Reading it for evaluation is welcome; using, copying, modifying, redistributing, or deploying it — in whole or in part — requires the prior written consent of the copyright holder. All rights reserved © 2026 Alireza Minagar. Bundled third-party libraries remain under their own respective licenses. See **[`LICENSE`](LICENSE)** for the full terms, including the medical/non-clinical disclaimer.
+
+---
+
 ## Author
 
 **Alireza Minagar, MD, MBA, MS (Bioinformatics), MS (Software Engineering)**
@@ -390,30 +357,17 @@ Alireza Minagar is a physician-engineer working at the intersection of clinical 
 
 ---
 
-## Screenshot Capture Guide
+## Screenshots
 
-Drop screenshots into `docs/images/` using these **exact filenames** — they match the `<img>` references above. Capture at a consistent width (≈1440px desktop is ideal); a few close-ups (11–13, 15, 18) can be tighter crops. GitHub shows a broken-image icon for any not-yet-added file, which is expected.
+All screenshots referenced above live in `docs/images/` (dark mode, ≈1440px desktop). This build ships the following captures:
 
-1. **`01-hero-dark.png`** — Hero/header in **dark mode**: gradient "TrialMatch AI" wordmark, tagline, and the stack chip row.
-2. **`02-hero-light.png`** — The **same hero in light mode** (toggle the theme, top-right).
-3. **`03-empty-form.png`** — The patient-profile form empty, with the "Ready to match" empty state in the results column.
-4. **`04-sample-dropdown.png`** — The **"Load sample patient" dropdown open**, showing all three profiles.
-5. **`05-form-filled-basic.png`** — The form filled with the **minimal 58F breast** profile.
-6. **`06-form-filled-rich.png`** — The form filled with the **full-workup** profile — make sure the **labs indicator line** ("Carrying N lab values …") is visible.
-7. **`07-trials-selector.png`** — The **"Trials to evaluate"** 3 / 5 / 10 / All segmented control.
-8. **`08-pipeline-running.png`** — The pipeline stepper **mid-run**, with a node pulsing/active.
-9. **`09-pipeline-complete.png`** — The pipeline stepper with **all 5 nodes checked complete**.
-10. **`10-overview-dark.png`** — The **full results overview**: headline, verdict-distribution bar, and the charts row.
-11. **`11-verdict-donut.png`** — A **close-up of the verdict-mix donut** chart.
-12. **`12-trials-by-score.png`** — A **close-up of the trials-by-score** bar chart.
-13. **`13-criteria-by-category.png`** — A **close-up of the criteria-by-category** chart.
-14. **`14-top-candidates.png`** — The **"Top candidates" callout row** (the three cards).
-15. **`15-llm-stats.png`** — The **"Powered by Claude" stats bar** (calls / tokens / cost / latency).
-16. **`16-trial-accordion.png`** — A **collapsed trial accordion** header row.
-17. **`17-criteria-table.png`** — An **expanded criteria table** showing PASS / FAIL / INSUFFICIENT rows.
-18. **`18-grounded-citation.png`** — A criterion **expanded to show the grounded verbatim quote**.
-19. **`19-by-verdict-view.png`** — The **"By verdict" global cross-trial** view.
-20. **`20-export-and-light.png`** — The **Download report / JSON** buttons (and/or the full results in **light mode**).
+- **`01-hero-dark.png`** — the landing header: gradient "TrialMatch AI" wordmark, tagline, and the technology-stack chip row.
+- **`03-empty-form.png`** — the patient-profile form in its ready state, with the "Ready to match" panel in the results column.
+- **`08-pipeline-running.png`** — the pipeline stepper mid-run: the first three nodes complete, criterion evaluation active, activity feed streaming.
+- **`10-overview-dark.png`** — the full results dashboard: the "5 trials evaluated" headline, verdict-distribution bar, the recharts visualizations, top-candidate cards, and the "Powered by Claude" cost bar.
+- **`16-trial-accordion.png`** — collapsed trial accordion cards: score ring, title, NCT link, verdict badge, phase/status, and Pass/Fail/Insufficient counts.
+- **`17-criteria-table.png`** — an expanded trial's criteria table: per-criterion verdict, reasoning, category, and confidence, with the verdict filter tabs and sort/search.
+- **`18-grounded-citation.png`** — criteria expanded to reveal the "grounded in the trial's own words" verbatim eligibility text — the differentiator.
 
 ---
 
