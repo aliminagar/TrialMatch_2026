@@ -15,7 +15,7 @@ describe("serializeReportJson", () => {
     expect(parsed.patient.primary_diagnosis.icd10).toBe("C50.911");
     expect(parsed.trial_verdicts[0].nct_id).toBe("NCT07174336");
     expect(parsed.trial_verdicts[0].criteria_verdicts[0].source_citation).toBeTruthy();
-    expect(parsed.llm_stats?.model).toBe("claude-sonnet-4-6");
+    expect(parsed.llm_stats?.model).toBe("claude-sonnet-5");
   });
 });
 

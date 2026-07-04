@@ -71,7 +71,7 @@ export const sampleReport: MatchReport = {
   run_id: null,
   disclaimer: "TrialMatch AI is a research and educational decision-support tool.",
   llm_stats: {
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5",
     api_calls: 1,
     input_tokens: 2622,
     output_tokens: 2283,

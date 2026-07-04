@@ -522,7 +522,7 @@ def _build_llm() -> Any | None:
         from langchain_anthropic import ChatAnthropic
     except ImportError:
         return None
-    model = os.environ.get("MODEL_NAME", "claude-sonnet-4-6")
+    model = os.environ.get("MODEL_NAME", "claude-sonnet-5")
     return ChatAnthropic(model=model, temperature=0, max_tokens=8000, timeout=90)
 
 

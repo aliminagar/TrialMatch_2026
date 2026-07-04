@@ -102,7 +102,7 @@ def _print_header(trial: Trial) -> None:
     print(f" trial title : {_short(trial.brief_title, 60)}")
     print(f" status      : {trial.overall_status}   phase: {trial.phase}")
     print(" router flag : TRIALMATCH_USE_LLM (the config switch)")
-    print(f" model       : {os.environ.get('MODEL_NAME', 'claude-sonnet-4-6 (default)')}")
+    print(f" model       : {os.environ.get('MODEL_NAME', 'claude-sonnet-5 (default)')}")
     print(f" api key     : {key_state}")
     print()
 

@@ -12,7 +12,7 @@ import type { LlmStats } from "@/lib/types";
  * stats are absent — e.g. the deterministic-rules path.
  */
 export function LlmStatsBar({ stats, model }: { stats?: LlmStats | null; model?: string }) {
-  const label = stats?.model ?? model ?? "claude-sonnet-4-6";
+  const label = stats?.model ?? model ?? "claude-sonnet-5";
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border bg-gradient-to-br from-surface-2 to-surface-3 px-3.5 py-2.5 text-xs">

@@ -301,7 +301,7 @@ class _FakeLLM:
         result: dict[str, Any] | None = None,
         *,
         raises: Exception | None = None,
-        model: str = "claude-sonnet-4-6",
+        model: str = "claude-sonnet-5",
     ) -> None:
         self._result = result or {}
         self._raises = raises
@@ -313,7 +313,7 @@ class _FakeLLM:
         return _FakeStructured(self._result, raises=self._raises)
 
 
-def _fake_llm_result(model: str = "claude-sonnet-4-6") -> dict[str, Any]:
+def _fake_llm_result(model: str = "claude-sonnet-5") -> dict[str, Any]:
     parsed = _LLMTrialEvaluation(
         verdicts=[
             _LLMVerdict(index=0, verdict="INSUFFICIENT_INFO", reasoning="dur", confidence=0.3),
@@ -325,12 +325,12 @@ def _fake_llm_result(model: str = "claude-sonnet-4-6") -> dict[str, Any]:
 
 def test_estimate_cost_sonnet_rates() -> None:
     # 1000 in @ $3/MTok + 500 out @ $15/MTok = 0.003 + 0.0075 = 0.0105
-    assert _estimate_cost_usd("claude-sonnet-4-6", 1000, 500) == pytest.approx(0.0105)
+    assert _estimate_cost_usd("claude-sonnet-5", 1000, 500) == pytest.approx(0.0105)
 
 
 def test_estimate_cost_matches_dated_suffix_by_prefix() -> None:
     # A dated/suffixed id still resolves to the same Sonnet rates via prefix.
-    assert _estimate_cost_usd("claude-sonnet-4-6-20990101", 1_000_000, 0) == pytest.approx(3.0)
+    assert _estimate_cost_usd("claude-sonnet-5-20990101", 1_000_000, 0) == pytest.approx(3.0)
 
 
 def test_estimate_cost_unknown_model_warns_and_uses_sonnet_fallback(
@@ -343,12 +343,12 @@ def test_estimate_cost_unknown_model_warns_and_uses_sonnet_fallback(
 
 
 def test_log_llm_call_emits_structured_proof(caplog: pytest.LogCaptureFixture) -> None:
-    llm = _FakeLLM(model="claude-sonnet-4-6")
+    llm = _FakeLLM(model="claude-sonnet-5")
     with caplog.at_level(logging.INFO, logger="trialmatch.agents.nodes.match_evaluator"):
-        _log_llm_call(llm, _FakeRaw(1000, 500, "claude-sonnet-4-6"), n_criteria=2, latency_s=1.5)
+        _log_llm_call(llm, _FakeRaw(1000, 500, "claude-sonnet-5"), n_criteria=2, latency_s=1.5)
     rec = next(r for r in caplog.records if getattr(r, "llm_model", None))
     assert rec.levelno == logging.INFO
-    assert rec.llm_model == "claude-sonnet-4-6"
+    assert rec.llm_model == "claude-sonnet-5"
     assert rec.api_calls == 1
     assert rec.input_tokens == 1000
     assert rec.output_tokens == 500
@@ -371,11 +371,11 @@ async def test_llm_evaluate_maps_verdicts_and_logs(caplog: pytest.LogCaptureFixt
     # grounding is preserved: each verdict cites its own criterion text
     assert [v.source_citation for v in verdicts] == [c.source_text for c in criteria]
     # stats are returned for the report, not just logged
-    assert stats.model == "claude-sonnet-4-6"
+    assert stats.model == "claude-sonnet-5"
     assert stats.api_calls == 1
     assert stats.input_tokens == 1000 and stats.output_tokens == 500
     assert stats.cost_usd == pytest.approx(0.0105)
-    assert any(getattr(r, "llm_model", None) == "claude-sonnet-4-6" for r in caplog.records)
+    assert any(getattr(r, "llm_model", None) == "claude-sonnet-5" for r in caplog.records)
 
 
 async def test_evaluate_criteria_falls_back_and_warns_on_llm_error(
@@ -398,9 +398,9 @@ def test_aggregate_stats_sums_across_trials() -> None:
     from trialmatch.agents.nodes.match_evaluator import _aggregate_stats
 
     assert _aggregate_stats([]) is None
-    a = LlmStats(model="claude-sonnet-4-6", api_calls=1, input_tokens=1000,
+    a = LlmStats(model="claude-sonnet-5", api_calls=1, input_tokens=1000,
                  output_tokens=500, cost_usd=0.0105, latency_s=2.0)
-    b = LlmStats(model="claude-sonnet-4-6", api_calls=1, input_tokens=200,
+    b = LlmStats(model="claude-sonnet-5", api_calls=1, input_tokens=200,
                  output_tokens=100, cost_usd=0.0021, latency_s=1.5)
     agg = _aggregate_stats([a, b])
     assert agg is not None
@@ -421,7 +421,7 @@ async def test_match_evaluator_surfaces_llm_stats_in_state(
     parsed = (await eligibility_parser({"candidate_trials": trials}))["parsed_criteria"]
     n = len(parsed[trials[0].nct_id])
     result = {
-        "raw": _FakeRaw(1500, 900, "claude-sonnet-4-6"),
+        "raw": _FakeRaw(1500, 900, "claude-sonnet-5"),
         "parsed": _LLMTrialEvaluation(
             verdicts=[
                 _LLMVerdict(index=i, verdict="PASS", reasoning="ok", confidence=0.8)
