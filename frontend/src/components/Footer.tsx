@@ -30,7 +30,7 @@ export function Footer() {
         TrialMatch AI is a research and educational decision-support tool — not a medical
         device. All verdicts require clinician review.{" "}
         <a
-          href="https://github.com/alirezaminagar/trialmatch-ai"
+          href="https://github.com/aliminagar/TrialMatch_2026"
           target="_blank"
           rel="noreferrer"
           className="text-accent underline-offset-2 hover:underline"

@@ -41,7 +41,7 @@ export function Header() {
           </div>
           <div className="flex items-center gap-2">
             <a
-              href="https://github.com/alirezaminagar/trialmatch-ai"
+              href="https://github.com/aliminagar/TrialMatch_2026"
               target="_blank"
               rel="noreferrer"
               aria-label="View source on GitHub"
