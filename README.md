@@ -319,6 +319,8 @@ trialmatch-ai/
 
 **This is a research and educational decision-support tool — not a medical device.** It does not diagnose, treat, or determine eligibility; every verdict is provisional and requires clinician confirmation. Discovery and verdicts depend on the completeness of the patient profile and the trial text.
 
+> 🔒 **Data provenance.** The built-in sample patient profiles are **synthetic** — fabricated for demonstration and containing **no real patient data (no PHI)**. The trials and eligibility criteria shown, however, are **live and real**, fetched from ClinicalTrials.gov at match time.
+
 Honest current limitations and where they go next:
 
 - **Search-term / LLM-context coupling.** The patient's diagnosis description feeds *both* the ClinicalTrials.gov condition search *and* the LLM's context. Long, highly-specific descriptions (e.g. "…stage IIB (T2N1M0)") return **zero** results from the registry's `query.cond`, so descriptions are kept searchable — which means fine-grained staging/biomarker detail can't currently ride in the discovery query. **Roadmap:** decouple the search term from the evaluation context so full staging can reach the LLM without breaking discovery.
